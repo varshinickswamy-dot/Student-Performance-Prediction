@@ -100,8 +100,12 @@ def test_password_reset_request_is_honest_without_email_provider():
     assert response.status_code == 503
 
 
-def test_local_vite_origins_are_allowed_by_cors():
-    for origin in ["http://localhost:5173", "http://127.0.0.1:5173"]:
+def test_vercel_and_local_vite_origins_are_allowed_by_cors():
+    for origin in [
+        "https://student-performance-prediction-flax-eight.vercel.app",
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+    ]:
         response = client.options(
             "/api/health",
             headers={
