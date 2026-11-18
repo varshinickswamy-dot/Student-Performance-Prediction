@@ -79,3 +79,17 @@ def test_password_reset_request_is_honest_without_email_provider():
         json={"email": "student@example.com"},
     )
     assert response.status_code == 503
+
+
+def test_local_vite_origins_are_allowed_by_cors():
+    for origin in ["http://localhost:5173", "http://127.0.0.1:5173"]:
+        response = client.options(
+            "/api/health",
+            headers={
+                "Origin": origin,
+                "Access-Control-Request-Method": "GET",
+                "Access-Control-Request-Headers": "authorization",
+            },
+        )
+        assert response.status_code == 200
+        assert response.headers["access-control-allow-origin"] == origin
