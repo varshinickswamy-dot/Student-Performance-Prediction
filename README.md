@@ -11,6 +11,8 @@ EduPredict is a full-stack academic analytics application for student performanc
 - Student profile management
 - Role-based administrator dashboard and audit logs
 - Vercel-compatible frontend and independently deployable FastAPI backend
+- Prediction report download and paginated history
+- Administrator audit logs, settings, password management, exports, and student safeguards
 
 ## Repository status
 

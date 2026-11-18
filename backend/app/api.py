@@ -85,6 +85,20 @@ def login(payload: LoginRequest, db: Session = Depends(get_db)):
     return TokenResponse(access_token=token, user=public_user(user))
 
 
+@router.post("/api/auth/password-reset/request")
+def password_reset_request(payload: dict):
+    provider = os.getenv("EMAIL_PROVIDER")
+    if not provider:
+        raise HTTPException(
+            status_code=503,
+            detail="Password reset is unavailable because no email provider is configured.",
+        )
+    return {
+        "status": "not_implemented",
+        "detail": "Email provider configuration is present, but a provider-specific workflow has not been enabled.",
+    }
+
+
 @router.post("/api/admin/login")
 def admin_login(payload: dict, db: Session = Depends(get_db)):
     username = str(payload.get("username", "")).strip()
@@ -110,14 +124,20 @@ def me(user: User = Depends(get_current_user)):
 def student_dashboard(user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     predictions = db.query(Prediction).filter(Prediction.user_id == user.id).order_by(Prediction.created_at.desc()).all()
     latest = predictions[0] if predictions else None
-    attendance = max((p.input_data.get("attendance", 0) for p in predictions), default=0)
+    attendance = latest.input_data.get("attendance", 0) if latest else 0
+    chronological = list(reversed(predictions))
+    if len(chronological) >= 2:
+        change = chronological[-1].predicted_score - chronological[-2].predicted_score
+        improvement_trend = f"{change:+.1f}%"
+    else:
+        improvement_trend = "Insufficient history"
     return {
         "welcome_name": user.full_name,
         "total_assessments": len(predictions),
         "latest_predicted_score": latest.predicted_score if latest else None,
         "academic_performance_level": latest.performance_category if latest else None,
         "attendance_percentage": attendance,
-        "improvement_trend": "Insufficient history",
+        "improvement_trend": improvement_trend,
         "recommendations": latest.recommendations if latest else [],
         "recent_predictions": [
             {
@@ -244,10 +264,31 @@ def admin_dashboard(admin: User = Depends(require_admin), db: Session = Depends(
     categories = db.query(Prediction.performance_category, func.count(Prediction.id)).group_by(
         Prediction.performance_category
     ).all()
+    recent_users = db.query(User).filter(User.role == "student").order_by(User.created_at.desc()).limit(5).all()
+    recent_predictions = db.query(Prediction).order_by(Prediction.created_at.desc()).limit(5).all()
     return {
         "total_students": users, "total_predictions": predictions,
         "active_users": active, "average_score": round(float(average or 0), 1),
         "category_distribution": [{"name": name, "value": count} for name, count in categories],
+        "recent_student_registrations": [
+            {
+                "id": u.id,
+                "full_name": u.full_name,
+                "email": u.email,
+                "created_at": u.created_at.isoformat(),
+            }
+            for u in recent_users
+        ],
+        "recent_prediction_activities": [
+            {
+                "id": p.id,
+                "student_name": p.user.full_name,
+                "subject": p.subject,
+                "predicted_score": p.predicted_score,
+                "created_at": p.created_at.isoformat(),
+            }
+            for p in recent_predictions
+        ],
     }
 
 
@@ -311,3 +352,47 @@ def admin_analytics(admin: User = Depends(require_admin), db: Session = Depends(
 def audit_logs(admin: User = Depends(require_admin), db: Session = Depends(get_db)):
     logs = db.query(AuditLog).order_by(AuditLog.created_at.desc()).limit(200).all()
     return [{"id": l.id, "actor_id": l.actor_id, "action": l.action, "details": l.details, "created_at": l.created_at.isoformat()} for l in logs]
+
+
+@router.delete("/api/admin/users/{user_id}", status_code=204)
+def delete_student(
+    user_id: int,
+    admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    user = db.get(User, user_id)
+    if not user or user.role == "admin":
+        raise HTTPException(status_code=404, detail="Student not found")
+    db.delete(user)
+    db.add(AuditLog(actor_id=admin.id, action="student_deleted", details=f"Student ID {user_id}"))
+    db.commit()
+    return None
+
+
+@router.get("/api/admin/settings")
+def admin_settings(admin: User = Depends(require_admin)):
+    return {
+        "application_name": "EduPredict",
+        "frontend_url": os.getenv("FRONTEND_URL", "http://localhost:5173"),
+        "database_configured": bool(os.getenv("DATABASE_URL")),
+        "email_reset_provider_configured": bool(os.getenv("EMAIL_PROVIDER")),
+        "default_admin_username": os.getenv("ADMIN_USERNAME", "admin"),
+    }
+
+
+@router.post("/api/admin/change-password")
+def admin_change_password(
+    payload: dict,
+    admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    current_password = str(payload.get("current_password", ""))
+    new_password = str(payload.get("new_password", ""))
+    if not verify_password(current_password, admin.password_hash):
+        raise HTTPException(status_code=400, detail="Current password is incorrect")
+    if len(new_password) < 12:
+        raise HTTPException(status_code=422, detail="New password must contain at least 12 characters")
+    admin.password_hash = hash_password(new_password)
+    db.add(AuditLog(actor_id=admin.id, action="admin_password_changed"))
+    db.commit()
+    return {"status": "updated"}

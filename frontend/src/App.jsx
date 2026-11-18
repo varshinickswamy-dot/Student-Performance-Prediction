@@ -3,7 +3,7 @@ import { Link, Navigate, Route, Routes, useNavigate, useParams } from "react-rou
 import {
   Activity, BarChart3, BookOpen, ChevronRight, GraduationCap, History,
   LayoutDashboard, LogOut, Menu, Moon, ShieldCheck, Sun, Target,
-  TrendingUp, UserRound, Users, X, BrainCircuit,
+  TrendingUp, UserRound, Users, X, BrainCircuit, Settings, ClipboardList,
 } from "lucide-react";
 import {
   Area, AreaChart, Bar, BarChart, CartesianGrid, Legend,
@@ -116,6 +116,18 @@ function AuthPage({ mode, auth }) {
   const [form, setForm] = useState({ full_name:"", email:"", password:"", confirm_password:"", institution_name:"", department:"", course:"", semester:"", academic_year:"", admin_username:"", admin_password:"" });
   const [error,setError] = useState(""); const [loading,setLoading] = useState(false);
   const set = e => setForm({...form,[e.target.name]:e.target.value});
+  const requestReset = async () => {
+    if (!form.email) {
+      setError("Enter your email address before requesting a password reset.");
+      return;
+    }
+    try {
+      await api.post("/api/auth/password-reset/request", { email: form.email });
+      setError("");
+    } catch (err) {
+      setError(err.response?.data?.detail || "Password reset is currently unavailable.");
+    }
+  };
   const submit = async e => {
     e.preventDefault(); setLoading(true); setError("");
     try {
@@ -149,7 +161,7 @@ function AuthPage({ mode, auth }) {
           {mode==="admin" ? <><label>Username<input name="admin_username" value={form.admin_username} onChange={set} required /></label><label>Password<input type="password" name="admin_password" value={form.admin_password} onChange={set} required /></label></> :
           <><label>Email Address<input type="email" name="email" value={form.email} onChange={set} required /></label><label>Password<input type="password" name="password" value={form.password} onChange={set} required /></label></>}
           {mode==="register" && <><label>Confirm Password<input type="password" name="confirm_password" value={form.confirm_password} onChange={set} required /></label></>}
-          {mode==="login" && <div className="form-options"><label className="checkbox"><input type="checkbox"/> Remember me</label><button type="button" className="text-button">Forgot password</button></div>}
+          {mode==="login" && <div className="form-options"><label className="checkbox"><input type="checkbox"/> Remember me</label><button type="button" className="text-button" onClick={requestReset}>Forgot password</button></div>}
           <button className="button primary full" disabled={loading}>{loading?"Please wait...":mode==="register"?"Create Account":mode==="admin"?"Sign in as Administrator":"Sign In"}</button>
         </form>
         {mode==="login" && <p className="auth-switch">New to EduPredict? <Link to="/register">Create an account</Link></p>}
@@ -164,7 +176,7 @@ function AppShell({ auth, admin=false, children }) {
   const navigate = useNavigate(); const [open,setOpen]=useState(false);
   const logout=()=>{auth.logout();navigate("/");};
   const items = admin ? [
-    ["/admin",LayoutDashboard,"Overview"],["/admin/users",Users,"Students"],["/admin/predictions",History,"Predictions"],["/admin/models",BrainCircuit,"ML Models"],["/admin/analytics",BarChart3,"Analytics"]
+    ["/admin",LayoutDashboard,"Overview"],["/admin/users",Users,"Students"],["/admin/predictions",History,"Predictions"],["/admin/models",BrainCircuit,"ML Models"],["/admin/analytics",BarChart3,"Analytics"],["/admin/audit",ClipboardList,"Audit Log"],["/admin/settings",Settings,"Settings"]
   ] : [
     ["/dashboard",LayoutDashboard,"Overview"],["/predict",Target,"Predict Performance"],["/predictions",History,"My Predictions"],["/analytics",BarChart3,"Academic Analytics"],["/recommendations",Activity,"Recommendations"],["/profile",UserRound,"My Profile"]
   ];
@@ -225,11 +237,13 @@ function PredictionForm() {
 function PredictionHistory() {
   const navigate=useNavigate();const [data,setData]=useState({items:[],total:0});
   const [search,setSearch]=useState("");const [category,setCategory]=useState("");
-  useEffect(()=>{api.get("/api/predictions/history",{params:{search:search||undefined,category:category||undefined}}).then(r=>setData(r.data)).catch(()=>{})},[search,category]);
+  const [page,setPage]=useState(1);
+  useEffect(()=>{api.get("/api/predictions/history",{params:{search:search||undefined,category:category||undefined,page,page_size:10}}).then(r=>setData(r.data)).catch(()=>{})},[search,category,page]);
+  useEffect(()=>setPage(1),[search,category]);
   const remove=async(id)=>{if(!window.confirm("Delete this prediction?"))return;await api.delete(`/api/predictions/${id}`);setData({...data,items:data.items.filter(p=>p.id!==id),total:data.total-1})};
   return <><div className="page-heading"><div><span>History</span><h1>My predictions</h1></div></div>
     <div className="filters"><input placeholder="Search subject" value={search} onChange={e=>setSearch(e.target.value)}/><select value={category} onChange={e=>setCategory(e.target.value)}><option value="">All categories</option><option>Excellent</option><option>Good</option><option>Average</option><option>Needs Improvement</option></select></div>
-    {data.items.length===0?<div className="empty-state"><History/><h2>No predictions found</h2><p>Create an assessment to begin your prediction history.</p><Link className="button primary" to="/predict">Predict performance</Link></div>:<article className="panel"><div className="table-wrap"><table><thead><tr><th>ID</th><th>Date</th><th>Subject</th><th>Score</th><th>Category</th><th>Actions</th></tr></thead><tbody>{data.items.map(p=><tr key={p.id}><td>#{p.id}</td><td>{new Date(p.created_at).toLocaleDateString()}</td><td>{p.subject}</td><td><strong>{p.predicted_score}%</strong></td><td><span className="badge">{p.performance_category}</span></td><td><button className="text-button" onClick={()=>navigate(`/predictions/${p.id}`)}>View</button><button className="text-button danger" onClick={()=>remove(p.id)}>Delete</button></td></tr>)}</tbody></table></div></article>}
+    {data.items.length===0?<div className="empty-state"><History/><h2>No predictions found</h2><p>Create an assessment to begin your prediction history.</p><Link className="button primary" to="/predict">Predict performance</Link></div>:<article className="panel"><div className="table-wrap"><table><thead><tr><th>ID</th><th>Date</th><th>Subject</th><th>Score</th><th>Category</th><th>Actions</th></tr></thead><tbody>{data.items.map(p=><tr key={p.id}><td>#{p.id}</td><td>{new Date(p.created_at).toLocaleDateString()}</td><td>{p.subject}</td><td><strong>{p.predicted_score}%</strong></td><td><span className="badge">{p.performance_category}</span></td><td><button className="text-button" onClick={()=>navigate(`/predictions/${p.id}`)}>View</button><button className="text-button danger" onClick={()=>remove(p.id)}>Delete</button></td></tr>)}</tbody></table></div><div className="pagination"><button className="button ghost" disabled={page<=1} onClick={()=>setPage(page-1)}>Previous</button><span>Page {page} of {Math.max(1,Math.ceil(data.total/10))}</span><button className="button ghost" disabled={page>=Math.ceil(data.total/10)} onClick={()=>setPage(page+1)}>Next</button></div></article>}
   </>;
 }
 
@@ -237,8 +251,34 @@ function PredictionDetail() {
   const {id}=useParams();
   const [p,setP]=useState(null);
   useEffect(()=>{api.get(`/api/predictions/${id}`).then(r=>setP(r.data)).catch(()=>{})},[id]);
+  const downloadReport=()=>{
+    if(!p)return;
+    const lines=[
+      "EduPredict Academic Prediction Report",
+      `Prediction ID: ${p.id}`,
+      `Subject: ${p.subject}`,
+      `Semester: ${p.semester}`,
+      `Predicted score: ${p.predicted_score}/100`,
+      `Performance category: ${p.performance_category}`,
+      `Model: ${p.model_version}`,
+      `Date: ${new Date(p.created_at).toLocaleString()}`,
+      "",
+      "Input information:",
+      ...Object.entries(p.input_data).map(([key,value])=>`${key.replaceAll("_"," ")}: ${typeof value==="boolean"?(value?"Yes":"No"):value}`),
+      "",
+      "Recommendations:",
+      ...p.recommendations.map(r=>`- [${r.priority}] ${r.area}: ${r.action}`),
+    ];
+    const blob=new Blob([lines.join("\n")],{type:"text/plain;charset=utf-8"});
+    const url=URL.createObjectURL(blob);
+    const link=document.createElement("a");
+    link.href=url;
+    link.download=`edupredict-prediction-${p.id}.txt`;
+    link.click();
+    URL.revokeObjectURL(url);
+  };
   if(!p)return <div className="loading-page"><span className="spinner"/>Loading result...</div>;
-  return <><div className="page-heading"><div><span>Result</span><h1>Prediction #{p.id}</h1></div><Link className="button ghost" to="/predictions">View history</Link></div>
+  return <><div className="page-heading"><div><span>Result</span><h1>Prediction #{p.id}</h1></div><div className="page-actions"><button className="button ghost" onClick={downloadReport}>Download Report</button><Link className="button ghost" to="/predict">Predict Again</Link><Link className="button primary" to="/predictions">View history</Link></div></div>
     <div className="result-grid"><article className="score-card"><span>Predicted academic score</span><div className="score-ring" style={{"--score":`${p.predicted_score*3.6}deg`}}><b>{p.predicted_score}</b><small>/100</small></div><span className="badge">{p.performance_category}</span><p>Model estimate · {p.model_version}</p></article>
     <article className="panel"><div className="panel-heading"><div><span>Assessment information</span><h3>{p.subject}</h3></div></div><div className="detail-grid">{Object.entries(p.input_data).filter(([k])=>k!=="subject"&&k!=="semester").map(([k,v])=><div key={k}><span>{k.replaceAll("_"," ")}</span><strong>{typeof v==="boolean"?v?"Yes":"No":v}</strong></div>)}</div></article></div>
     <article className="panel"><div className="panel-heading"><div><span>Next steps</span><h3>Personalized recommendations</h3></div></div><div className="recommendation-list">{p.recommendations.map((r,i)=><div className="recommendation" key={i}><span className={`priority ${r.priority.toLowerCase()}`}>{r.priority}</span><div><b>{r.area}</b><p>{r.action}</p><small>{r.benefit}</small></div></div>)}</div></article>
@@ -263,7 +303,7 @@ function Profile() {
   const submit=async e=>{e.preventDefault();await api.put("/api/student/profile",profile);setSaved(true);setTimeout(()=>setSaved(false),2000)};
   if(!profile)return <div className="loading-page">Loading profile...</div>;
   const set=e=>setProfile({...profile,[e.target.name]:e.target.value});
-  return <><div className="page-heading"><div><span>Account</span><h1>My profile</h1></div></div><article className="panel profile-panel">{saved&&<div className="toast">Profile updated</div>}<form onSubmit={submit}><div className="form-grid"><label>Full Name<input name="full_name" value={profile.full_name||""} onChange={set}/></label><label>Email Address<input value={profile.email||""} disabled/></label><label>Institution<input name="institution_name" value={profile.institution_name||""} onChange={set}/></label><label>Department<input name="department" value={profile.department||""} onChange={set}/></label><label>Course<input name="course" value={profile.course||""} onChange={set}/></label><label>Semester<input name="semester" value={profile.semester||""} onChange={set}/></label></div><button className="button primary">Save changes</button></form></article></>;
+  return <><div className="page-heading"><div><span>Account</span><h1>My profile</h1></div></div><article className="panel profile-panel">{saved&&<div className="toast">Profile updated</div>}<form onSubmit={submit}><div className="form-grid"><label>Full Name<input name="full_name" value={profile.full_name||""} onChange={set}/></label><label>Email Address<input value={profile.email||""} disabled/></label><label>Student ID<input name="student_id" value={profile.student_id||""} onChange={set}/></label><label>Institution<input name="institution_name" value={profile.institution_name||""} onChange={set}/></label><label>Department<input name="department" value={profile.department||""} onChange={set}/></label><label>Course<input name="course" value={profile.course||""} onChange={set}/></label><label>Semester<input name="semester" value={profile.semester||""} onChange={set}/></label><label>Academic Year<input name="academic_year" value={profile.academic_year||""} onChange={set}/></label></div><button className="button primary">Save changes</button></form></article></>;
 }
 
 function AdminOverview() {
@@ -271,20 +311,28 @@ function AdminOverview() {
   useEffect(()=>api.get("/api/admin/dashboard").then(r=>setData(r.data)).catch(()=>{}),[]);
   if(!data)return <div className="loading-page">Loading administration...</div>;
   return <><div className="page-heading"><div><span>Control center</span><h1>Administrator overview</h1></div></div><StatCards items={[[Users,"Registered students",data.total_students],[History,"Total predictions",data.total_predictions],[ShieldCheck,"Active users",data.active_users],[Target,"Average predicted score",`${data.average_score}%`]]}/>
-    <div className="chart-grid"><article className="panel"><h3>Performance category distribution</h3><ResponsiveContainer width="100%" height={300}><PieChart><Pie data={data.category_distribution} dataKey="value" nameKey="name" innerRadius={65} outerRadius={110} paddingAngle={4} fill="#7566F1"/><Tooltip/><Legend/></PieChart></ResponsiveContainer></article><article className="panel admin-note"><ShieldCheck/><h3>Role-based protection</h3><p>Administrator API endpoints require a valid administrator token and server-side role authorization.</p></article></div></>;
+    <div className="chart-grid"><article className="panel"><h3>Performance category distribution</h3><ResponsiveContainer width="100%" height={300}><PieChart><Pie data={data.category_distribution} dataKey="value" nameKey="name" innerRadius={65} outerRadius={110} paddingAngle={4} fill="#7566F1"/><Tooltip/><Legend/></PieChart></ResponsiveContainer></article><article className="panel admin-note"><ShieldCheck/><h3>Role-based protection</h3><p>Administrator API endpoints require a valid administrator token and server-side role authorization.</p></article></div>
+    <div className="chart-grid"><article className="panel"><h3>Recent student registrations</h3>{data.recent_student_registrations?.length?<div className="table-wrap"><table><tbody>{data.recent_student_registrations.map(u=><tr key={u.id}><td><strong>{u.full_name}</strong></td><td>{u.email}</td><td>{new Date(u.created_at).toLocaleDateString()}</td></tr>)}</tbody></table></div>:<p className="muted">No registrations yet.</p>}</article><article className="panel"><h3>Recent prediction activity</h3>{data.recent_prediction_activities?.length?<div className="table-wrap"><table><tbody>{data.recent_prediction_activities.map(p=><tr key={p.id}><td>{p.student_name}</td><td>{p.subject}</td><td><strong>{p.predicted_score}%</strong></td></tr>)}</tbody></table></div>:<p className="muted">No predictions yet.</p>}</article></div></>;
 }
 
 function AdminUsers() {
   const [users,setUsers]=useState([]),[search,setSearch]=useState("");
   useEffect(()=>api.get("/api/admin/users",{params:{search:search||undefined}}).then(r=>setUsers(r.data)).catch(()=>{}),[search]);
   const toggle=async u=>{const r=await api.patch(`/api/admin/users/${u.id}/active`,null,{params:{active:!u.active}});setUsers(users.map(x=>x.id===u.id?{...x,active:r.data.active}:x))};
-  return <><div className="page-heading"><div><span>Management</span><h1>Students</h1></div></div><div className="filters"><input placeholder="Search name or email" value={search} onChange={e=>setSearch(e.target.value)}/></div><article className="panel"><div className="table-wrap"><table><thead><tr><th>Student</th><th>Email</th><th>Institution</th><th>Status</th><th>Action</th></tr></thead><tbody>{users.map(u=><tr key={u.id}><td><strong>{u.full_name}</strong></td><td>{u.email}</td><td>{u.institution_name||"—"}</td><td><span className={`badge ${u.active?"success":"danger"}`}>{u.active?"Active":"Inactive"}</span></td><td><button className="text-button" onClick={()=>toggle(u)}>{u.active?"Deactivate":"Activate"}</button></td></tr>)}</tbody></table></div></article></>;
+  const remove=async u=>{if(!window.confirm(`Permanently delete ${u.full_name}?`))return;await api.delete(`/api/admin/users/${u.id}`);setUsers(users.filter(x=>x.id!==u.id))};
+  return <><div className="page-heading"><div><span>Management</span><h1>Students</h1></div></div><div className="filters"><input placeholder="Search name or email" value={search} onChange={e=>setSearch(e.target.value)}/></div><article className="panel"><div className="table-wrap"><table><thead><tr><th>Student</th><th>Email</th><th>Institution</th><th>Status</th><th>Action</th></tr></thead><tbody>{users.map(u=><tr key={u.id}><td><strong>{u.full_name}</strong></td><td>{u.email}</td><td>{u.institution_name||"—"}</td><td><span className={`badge ${u.active?"success":"danger"}`}>{u.active?"Active":"Inactive"}</span></td><td><button className="text-button" onClick={()=>toggle(u)}>{u.active?"Deactivate":"Activate"}</button><button className="text-button danger" onClick={()=>remove(u)}>Delete</button></td></tr>)}</tbody></table></div></article></>;
 }
 
 function AdminPredictions() {
   const [items,setItems]=useState([]);
   useEffect(()=>api.get("/api/admin/predictions").then(r=>setItems(r.data)).catch(()=>{}),[]);
-  return <><div className="page-heading"><div><span>Records</span><h1>Prediction management</h1></div></div><article className="panel"><div className="table-wrap"><table><thead><tr><th>ID</th><th>Student</th><th>Subject</th><th>Score</th><th>Category</th><th>Date</th></tr></thead><tbody>{items.map(p=><tr key={p.id}><td>#{p.id}</td><td>{p.student_name}</td><td>{p.subject}</td><td><strong>{p.predicted_score}%</strong></td><td><span className="badge">{p.performance_category}</span></td><td>{new Date(p.created_at).toLocaleDateString()}</td></tr>)}</tbody></table></div></article></>;
+  const exportCsv=()=>{
+    const rows=[["ID","Student","Subject","Score","Category","Date"],...items.map(p=>[p.id,p.student_name,p.subject,p.predicted_score,p.performance_category,p.created_at])];
+    const csv=rows.map(row=>row.map(value=>`"${String(value).replaceAll('"','""')}"`).join(",")).join("\n");
+    const url=URL.createObjectURL(new Blob([csv],{type:"text/csv;charset=utf-8"}));
+    const link=document.createElement("a");link.href=url;link.download="edupredict-predictions.csv";link.click();URL.revokeObjectURL(url);
+  };
+  return <><div className="page-heading"><div><span>Records</span><h1>Prediction management</h1></div><button className="button ghost" onClick={exportCsv}>Export CSV</button></div><article className="panel"><div className="table-wrap"><table><thead><tr><th>ID</th><th>Student</th><th>Subject</th><th>Score</th><th>Category</th><th>Date</th></tr></thead><tbody>{items.map(p=><tr key={p.id}><td>#{p.id}</td><td>{p.student_name}</td><td>{p.subject}</td><td><strong>{p.predicted_score}%</strong></td><td><span className="badge">{p.performance_category}</span></td><td>{new Date(p.created_at).toLocaleDateString()}</td></tr>)}</tbody></table></div></article></>;
 }
 
 function AdminModels() {
@@ -299,6 +347,26 @@ function AdminAnalytics() {
   useEffect(()=>api.get("/api/admin/analytics").then(r=>setData(r.data)).catch(()=>{}),[]);
   if(!data)return <div className="loading-page">Loading analytics...</div>;
   return <><div className="page-heading"><div><span>Institutional insights</span><h1>Analytics</h1></div></div><article className="panel"><h3>Subject-wise performance</h3><ResponsiveContainer width="100%" height={320}><BarChart data={data.subject_performance}><CartesianGrid strokeDasharray="3 3"/><XAxis dataKey="subject"/><YAxis domain={[0,100]}/><Tooltip/><Bar dataKey="score" fill="#7566F1"/></BarChart></ResponsiveContainer></article></>;
+}
+
+function AdminAudit() {
+  const [logs,setLogs]=useState([]);
+  useEffect(()=>api.get("/api/admin/audit-logs").then(r=>setLogs(r.data)).catch(()=>{}),[]);
+  return <><div className="page-heading"><div><span>Security</span><h1>Audit log</h1></div></div><article className="panel"><div className="table-wrap"><table><thead><tr><th>Time</th><th>Actor</th><th>Action</th><th>Details</th></tr></thead><tbody>{logs.map(log=><tr key={log.id}><td>{new Date(log.created_at).toLocaleString()}</td><td>{log.actor_id||"—"}</td><td><strong>{log.action}</strong></td><td>{log.details||"—"}</td></tr>)}</tbody></table></div></article></>;
+}
+
+function AdminSettings() {
+  const [settings,setSettings]=useState(null);
+  const [password,setPassword]=useState({current_password:"",new_password:""});
+  const [status,setStatus]=useState("");
+  useEffect(()=>api.get("/api/admin/settings").then(r=>setSettings(r.data)).catch(()=>{}),[]);
+  const changePassword=async e=>{
+    e.preventDefault();setStatus("");
+    try{await api.post("/api/admin/change-password",password);setStatus("Administrator password updated.");setPassword({current_password:"",new_password:""})}
+    catch(err){setStatus(err.response?.data?.detail||"Unable to update password.");}
+  };
+  if(!settings)return <div className="loading-page">Loading settings...</div>;
+  return <><div className="page-heading"><div><span>Administration</span><h1>Settings</h1></div></div><div className="chart-grid"><article className="panel"><h3>Application configuration</h3><div className="detail-grid"><div><span>Application</span><strong>{settings.application_name}</strong></div><div><span>Database</span><strong>{settings.database_configured?"Configured":"Local default"}</strong></div><div><span>Email provider</span><strong>{settings.email_reset_provider_configured?"Configured":"Not configured"}</strong></div><div><span>Admin username</span><strong>{settings.default_admin_username}</strong></div></div></article><article className="panel"><h3>Change administrator password</h3><form onSubmit={changePassword}><label>Current password<input type="password" value={password.current_password} onChange={e=>setPassword({...password,current_password:e.target.value})} required/></label><label>New password<input type="password" value={password.new_password} onChange={e=>setPassword({...password,new_password:e.target.value})} minLength={12} required/></label>{status&&<div className="alert">{status}</div>}<button className="button primary">Update password</button></form></article></div></>;
 }
 
 function Protected({auth,admin=false,children}) {
@@ -326,6 +394,8 @@ export default function App() {
     <Route path="/admin/predictions" element={<Protected auth={auth} admin><AdminPredictions/></Protected>}/>
     <Route path="/admin/models" element={<Protected auth={auth} admin><AdminModels/></Protected>}/>
     <Route path="/admin/analytics" element={<Protected auth={auth} admin><AdminAnalytics/></Protected>}/>
+    <Route path="/admin/audit" element={<Protected auth={auth} admin><AdminAudit/></Protected>}/>
+    <Route path="/admin/settings" element={<Protected auth={auth} admin><AdminSettings/></Protected>}/>
     <Route path="*" element={<Navigate to="/" replace/>}/>
   </Routes>;
 }

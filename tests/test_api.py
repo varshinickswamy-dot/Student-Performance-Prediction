@@ -71,3 +71,11 @@ def test_admin_role_is_enforced():
         headers={"Authorization": f"Bearer {token}"},
     )
     assert response.status_code == 403
+
+
+def test_password_reset_request_is_honest_without_email_provider():
+    response = client.post(
+        "/api/auth/password-reset/request",
+        json={"email": "student@example.com"},
+    )
+    assert response.status_code == 503
