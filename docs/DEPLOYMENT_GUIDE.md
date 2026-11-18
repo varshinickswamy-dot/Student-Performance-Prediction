@@ -6,7 +6,17 @@ Import the `frontend/` directory into Vercel. Set `VITE_API_BASE_URL` to the bac
 
 ## Backend
 
-Deploy `backend/` to Render, Railway, or another ASGI-capable platform. Use Python 3.12 and start with:
+Deploy `backend/` to Render, Railway, or another ASGI-capable platform. Set the backend root directory to `backend/` and use Python 3.12.
+
+Render build command:
+
+```text
+python -m pip install --upgrade pip && python -m pip install --only-binary=:all: -r requirements.txt
+```
+
+This installs prebuilt wheels only; it prevents pip from silently attempting to compile packages from source.
+
+Start command:
 
 ```text
 uvicorn app.main:app --host 0.0.0.0 --port $PORT
