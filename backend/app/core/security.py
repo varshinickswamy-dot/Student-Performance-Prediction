@@ -9,6 +9,10 @@ import jwt
 JWT_SECRET_KEY = os.getenv("JWT_SECRET_KEY", "local-development-only-change-me")
 JWT_ALGORITHM = os.getenv("JWT_ALGORITHM", "HS256")
 ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "1440"))
+ENVIRONMENT = os.getenv("ENVIRONMENT", "development").lower()
+
+if ENVIRONMENT in {"production", "prod"} and JWT_SECRET_KEY == "local-development-only-change-me":
+    raise RuntimeError("JWT_SECRET_KEY must be configured with a strong random value in production.")
 
 
 def hash_password(password: str) -> str:

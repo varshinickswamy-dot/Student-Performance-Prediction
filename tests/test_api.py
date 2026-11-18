@@ -57,6 +57,20 @@ def test_registration_login_prediction_and_history():
     student_detail = client.get(f"/api/predictions/{body['id']}", headers=headers)
     assert student_detail.status_code == 200
 
+    other_user = client.post("/api/auth/register", json={
+        "full_name": "Other Student",
+        "email": "other-student@example.com",
+        "password": "StrongPassword123",
+        "confirm_password": "StrongPassword123",
+    })
+    other_headers = {"Authorization": f"Bearer {other_user.json()['access_token']}"}
+    assert client.get(
+        f"/api/predictions/{body['id']}", headers=other_headers
+    ).status_code == 404
+    assert client.delete(
+        f"/api/predictions/{body['id']}", headers=other_headers
+    ).status_code == 404
+
 
 def test_admin_role_is_enforced():
     register = client.post("/api/auth/register", json={

@@ -87,16 +87,10 @@ def login(payload: LoginRequest, db: Session = Depends(get_db)):
 
 @router.post("/api/auth/password-reset/request")
 def password_reset_request(payload: dict):
-    provider = os.getenv("EMAIL_PROVIDER")
-    if not provider:
-        raise HTTPException(
-            status_code=503,
-            detail="Password reset is unavailable because no email provider is configured.",
-        )
-    return {
-        "status": "not_implemented",
-        "detail": "Email provider configuration is present, but a provider-specific workflow has not been enabled.",
-    }
+    raise HTTPException(
+        status_code=503,
+        detail="Password reset is unavailable because no email delivery workflow is configured.",
+    )
 
 
 @router.post("/api/admin/login")

@@ -35,6 +35,11 @@ def startup():
     try:
         username = os.getenv("ADMIN_USERNAME", "admin")
         password = os.getenv("ADMIN_PASSWORD", "admin123")
+        if os.getenv("ENVIRONMENT", "development").lower() in {"production", "prod"}:
+            if not os.getenv("FRONTEND_URL"):
+                raise RuntimeError("FRONTEND_URL must be configured in production.")
+            if not os.getenv("ADMIN_PASSWORD") or password == "admin123":
+                raise RuntimeError("Set a non-default ADMIN_PASSWORD before production startup.")
         admin = db.query(User).filter(User.role == "admin").first()
         if not admin:
             db.add(User(

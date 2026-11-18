@@ -9,21 +9,33 @@ import {
   Area, AreaChart, Bar, BarChart, CartesianGrid, Legend,
   Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from "recharts";
-import api from "./api";
+import api, { getApiErrorMessage, reportApiError } from "./api";
 
 function useAuth() {
   const [user, setUser] = useState(() => {
-    try { return JSON.parse(localStorage.getItem("edupredict_user")); }
+    try {
+      return JSON.parse(
+        localStorage.getItem("edupredict_user") ||
+        sessionStorage.getItem("edupredict_user")
+      );
+    }
     catch { return null; }
   });
-  const login = (token, nextUser) => {
-    localStorage.setItem("edupredict_token", token);
-    localStorage.setItem("edupredict_user", JSON.stringify(nextUser));
+  const login = (token, nextUser, remember = true) => {
+    localStorage.removeItem("edupredict_token");
+    localStorage.removeItem("edupredict_user");
+    sessionStorage.removeItem("edupredict_token");
+    sessionStorage.removeItem("edupredict_user");
+    const storage = remember ? localStorage : sessionStorage;
+    storage.setItem("edupredict_token", token);
+    storage.setItem("edupredict_user", JSON.stringify(nextUser));
     setUser(nextUser);
   };
   const logout = () => {
     localStorage.removeItem("edupredict_token");
     localStorage.removeItem("edupredict_user");
+    sessionStorage.removeItem("edupredict_token");
+    sessionStorage.removeItem("edupredict_user");
     setUser(null);
   };
   return { user, login, logout };
@@ -40,6 +52,24 @@ function ThemeToggle() {
       {theme === "dark" ? <Sun size={18} /> : <Moon size={18} />}
     </button>
   );
+}
+
+function ApiNotifications() {
+  const [message, setMessage] = useState("");
+  useEffect(() => {
+    let timer;
+    const show = (event) => {
+      setMessage(event.detail);
+      window.clearTimeout(timer);
+      timer = window.setTimeout(() => setMessage(""), 6000);
+    };
+    window.addEventListener("edupredict:api-error", show);
+    return () => {
+      window.removeEventListener("edupredict:api-error", show);
+      window.clearTimeout(timer);
+    };
+  }, []);
+  return message ? <div className="api-notification" role="alert">{message}</div> : null;
 }
 
 function PublicNav() {
@@ -113,9 +143,9 @@ function Landing() {
 
 function AuthPage({ mode, auth }) {
   const navigate = useNavigate();
-  const [form, setForm] = useState({ full_name:"", email:"", password:"", confirm_password:"", institution_name:"", department:"", course:"", semester:"", academic_year:"", admin_username:"", admin_password:"" });
+  const [form, setForm] = useState({ full_name:"", email:"", password:"", confirm_password:"", institution_name:"", department:"", course:"", semester:"", academic_year:"", admin_username:"", admin_password:"", remember:true });
   const [error,setError] = useState(""); const [loading,setLoading] = useState(false);
-  const set = e => setForm({...form,[e.target.name]:e.target.value});
+  const set = e => setForm({...form,[e.target.name]:e.target.type==="checkbox"?e.target.checked:e.target.value});
   const requestReset = async () => {
     if (!form.email) {
       setError("Enter your email address before requesting a password reset.");
@@ -140,9 +170,9 @@ function AuthPage({ mode, auth }) {
         auth.login(res.data.access_token,res.data.user); navigate("/dashboard");
       } else {
         const res = await api.post("/api/auth/login",{email:form.email,password:form.password});
-        auth.login(res.data.access_token,res.data.user); navigate(res.data.user.role==="admin"?"/admin":"/dashboard");
+        auth.login(res.data.access_token,res.data.user,form.remember); navigate(res.data.user.role==="admin"?"/admin":"/dashboard");
       }
-    } catch(err) { setError(err.response?.data?.detail || err.message || "Unable to continue"); }
+    } catch(err) { setError(getApiErrorMessage(err)); }
     finally { setLoading(false); }
   };
   return (
@@ -161,7 +191,7 @@ function AuthPage({ mode, auth }) {
           {mode==="admin" ? <><label>Username<input name="admin_username" value={form.admin_username} onChange={set} required /></label><label>Password<input type="password" name="admin_password" value={form.admin_password} onChange={set} required /></label></> :
           <><label>Email Address<input type="email" name="email" value={form.email} onChange={set} required /></label><label>Password<input type="password" name="password" value={form.password} onChange={set} required /></label></>}
           {mode==="register" && <><label>Confirm Password<input type="password" name="confirm_password" value={form.confirm_password} onChange={set} required /></label></>}
-          {mode==="login" && <div className="form-options"><label className="checkbox"><input type="checkbox"/> Remember me</label><button type="button" className="text-button" onClick={requestReset}>Forgot password</button></div>}
+          {mode==="login" && <div className="form-options"><label className="checkbox"><input type="checkbox" name="remember" checked={form.remember} onChange={set}/> Remember me</label><button type="button" className="text-button" onClick={requestReset}>Forgot password</button></div>}
           <button className="button primary full" disabled={loading}>{loading?"Please wait...":mode==="register"?"Create Account":mode==="admin"?"Sign in as Administrator":"Sign In"}</button>
         </form>
         {mode==="login" && <p className="auth-switch">New to EduPredict? <Link to="/register">Create an account</Link></p>}
@@ -202,12 +232,12 @@ function StatCards({items}) {
 
 function Dashboard() {
   const [data,setData]=useState(null); const [trends,setTrends]=useState([]); const [subjects,setSubjects]=useState([]);
-  useEffect(()=>{Promise.all([api.get("/api/student/dashboard"),api.get("/api/analytics/trends"),api.get("/api/analytics/subjects")]).then(([d,t,s])=>{setData(d.data);setTrends(t.data);setSubjects(s.data)}).catch(()=>{})},[]);
+  useEffect(()=>{Promise.all([api.get("/api/student/dashboard"),api.get("/api/analytics/trends"),api.get("/api/analytics/subjects")]).then(([d,t,s])=>{setData(d.data);setTrends(t.data);setSubjects(s.data)}).catch(reportApiError)},[]);
   if(!data) return <div className="loading-page"><span className="spinner"/>Loading dashboard...</div>;
   return <>
     <div className="page-heading"><div><span>Overview</span><h1>Welcome back, {data.welcome_name}</h1></div><Link className="button primary" to="/predict">New prediction</Link></div>
     <StatCards items={[
-      [BookOpen,"Total assessments",data.total_assessments],[Target,"Latest predicted score",data.latest_predicted_score?[`${data.latest_predicted_score}%`]:null],[Activity,"Performance level",data.academic_performance_level],[TrendingUp,"Attendance",data.attendance_percentage?`${data.attendance_percentage}%`:"—"]
+      [BookOpen,"Total assessments",data.total_assessments],[Target,"Latest predicted score",data.latest_predicted_score?[`${data.latest_predicted_score}%`]:null],[Activity,"Performance level",data.academic_performance_level],[TrendingUp,"Attendance",data.attendance_percentage?`${data.attendance_percentage}%`:"—"],[TrendingUp,"Improvement trend",data.improvement_trend]
     ]}/>
     {data.total_assessments===0 ? <div className="empty-state"><div className="empty-icon"><BrainCircuit/></div><h2>Create your first prediction</h2><p>Enter your academic information to receive a transparent model estimate and personalized improvement recommendations.</p><Link className="button primary" to="/predict">Create prediction</Link></div> :
     <><div className="chart-grid"><article className="panel"><div className="panel-heading"><div><span>Progress</span><h3>Academic performance trend</h3></div></div><ResponsiveContainer width="100%" height={260}><AreaChart data={trends}><CartesianGrid strokeDasharray="3 3"/><XAxis dataKey="date"/><YAxis domain={[0,100]}/><Tooltip/><Area type="monotone" dataKey="score" stroke="#7566F1" fill="#7566F1" fillOpacity={.18}/></AreaChart></ResponsiveContainer></article>
@@ -221,7 +251,7 @@ function PredictionForm() {
   const [form,setForm]=useState({subject:"",semester:"",study_hours:4,previous_marks:70,attendance:85,assignment_scores:75,class_participation:70,homework_completion:80,sleep_hours:7,extracurricular:false,internet_access:true,family_support:true});
   const [loading,setLoading]=useState(false),[error,setError]=useState("");
   const set=e=>setForm({...form,[e.target.name]:e.target.type==="checkbox"?e.target.checked:e.target.type==="number"?Number(e.target.value):e.target.value});
-  const submit=async e=>{e.preventDefault();setLoading(true);setError("");try{const res=await api.post("/api/predictions/predict",form);navigate(`/predictions/${res.data.id}`)}catch(err){setError(err.response?.data?.detail?.[0]?.msg||err.response?.data?.detail||"Could not generate prediction")}finally{setLoading(false)}};
+  const submit=async e=>{e.preventDefault();setLoading(true);setError("");try{const res=await api.post("/api/predictions/predict",form);navigate(`/predictions/${res.data.id}`)}catch(err){setError(getApiErrorMessage(err))}finally{setLoading(false)}};
   const numberFields=[
     ["study_hours","Study Hours Per Day",0,16,0.5],["previous_marks","Previous Examination Marks",0,100,1],["attendance","Attendance Percentage",0,100,1],["assignment_scores","Assignment Scores",0,100,1],["class_participation","Class Participation",0,100,1],["homework_completion","Homework Completion",0,100,1],["sleep_hours","Sleep Hours",0,16,0.5]
   ];
@@ -238,9 +268,9 @@ function PredictionHistory() {
   const navigate=useNavigate();const [data,setData]=useState({items:[],total:0});
   const [search,setSearch]=useState("");const [category,setCategory]=useState("");
   const [page,setPage]=useState(1);
-  useEffect(()=>{api.get("/api/predictions/history",{params:{search:search||undefined,category:category||undefined,page,page_size:10}}).then(r=>setData(r.data)).catch(()=>{})},[search,category,page]);
+  useEffect(()=>{api.get("/api/predictions/history",{params:{search:search||undefined,category:category||undefined,page,page_size:10}}).then(r=>setData(r.data)).catch(reportApiError)},[search,category,page]);
   useEffect(()=>setPage(1),[search,category]);
-  const remove=async(id)=>{if(!window.confirm("Delete this prediction?"))return;await api.delete(`/api/predictions/${id}`);setData({...data,items:data.items.filter(p=>p.id!==id),total:data.total-1})};
+  const remove=async(id)=>{if(!window.confirm("Delete this prediction?"))return;try{await api.delete(`/api/predictions/${id}`);setData({...data,items:data.items.filter(p=>p.id!==id),total:data.total-1})}catch(err){reportApiError(err)}};
   return <><div className="page-heading"><div><span>History</span><h1>My predictions</h1></div></div>
     <div className="filters"><input placeholder="Search subject" value={search} onChange={e=>setSearch(e.target.value)}/><select value={category} onChange={e=>setCategory(e.target.value)}><option value="">All categories</option><option>Excellent</option><option>Good</option><option>Average</option><option>Needs Improvement</option></select></div>
     {data.items.length===0?<div className="empty-state"><History/><h2>No predictions found</h2><p>Create an assessment to begin your prediction history.</p><Link className="button primary" to="/predict">Predict performance</Link></div>:<article className="panel"><div className="table-wrap"><table><thead><tr><th>ID</th><th>Date</th><th>Subject</th><th>Score</th><th>Category</th><th>Actions</th></tr></thead><tbody>{data.items.map(p=><tr key={p.id}><td>#{p.id}</td><td>{new Date(p.created_at).toLocaleDateString()}</td><td>{p.subject}</td><td><strong>{p.predicted_score}%</strong></td><td><span className="badge">{p.performance_category}</span></td><td><button className="text-button" onClick={()=>navigate(`/predictions/${p.id}`)}>View</button><button className="text-button danger" onClick={()=>remove(p.id)}>Delete</button></td></tr>)}</tbody></table></div><div className="pagination"><button className="button ghost" disabled={page<=1} onClick={()=>setPage(page-1)}>Previous</button><span>Page {page} of {Math.max(1,Math.ceil(data.total/10))}</span><button className="button ghost" disabled={page>=Math.ceil(data.total/10)} onClick={()=>setPage(page+1)}>Next</button></div></article>}
@@ -250,7 +280,7 @@ function PredictionHistory() {
 function PredictionDetail() {
   const {id}=useParams();
   const [p,setP]=useState(null);
-  useEffect(()=>{api.get(`/api/predictions/${id}`).then(r=>setP(r.data)).catch(()=>{})},[id]);
+  useEffect(()=>{api.get(`/api/predictions/${id}`).then(r=>setP(r.data)).catch(reportApiError)},[id]);
   const downloadReport=()=>{
     if(!p)return;
     const lines=[
@@ -287,20 +317,20 @@ function PredictionDetail() {
 
 function Analytics() {
   const [trends,setTrends]=useState([]),[subjects,setSubjects]=useState([]);
-  useEffect(()=>{Promise.all([api.get("/api/analytics/trends"),api.get("/api/analytics/subjects")]).then(([t,s])=>{setTrends(t.data);setSubjects(s.data)}).catch(()=>{})},[]);
+  useEffect(()=>{Promise.all([api.get("/api/analytics/trends"),api.get("/api/analytics/subjects")]).then(([t,s])=>{setTrends(t.data);setSubjects(s.data)}).catch(reportApiError)},[]);
   return <><div className="page-heading"><div><span>Insights</span><h1>Academic analytics</h1></div></div><div className="chart-grid"><article className="panel"><h3>Study hours versus performance</h3><ResponsiveContainer width="100%" height={300}><BarChart data={trends}><CartesianGrid strokeDasharray="3 3"/><XAxis dataKey="study_hours"/><YAxis/><Tooltip/><Legend/><Bar dataKey="score" fill="#7566F1" name="Predicted score"/></BarChart></ResponsiveContainer></article><article className="panel"><h3>Attendance and performance</h3><ResponsiveContainer width="100%" height={300}><AreaChart data={trends}><CartesianGrid strokeDasharray="3 3"/><XAxis dataKey="attendance"/><YAxis/><Tooltip/><Area dataKey="score" stroke="#A78BFA" fill="#A78BFA" fillOpacity={.2}/></AreaChart></ResponsiveContainer></article></div><article className="panel"><h3>Subject comparison</h3><ResponsiveContainer width="100%" height={280}><BarChart data={subjects}><CartesianGrid strokeDasharray="3 3"/><XAxis dataKey="subject"/><YAxis domain={[0,100]}/><Tooltip/><Bar dataKey="score" fill="#7566F1"/></BarChart></ResponsiveContainer></article></>;
 }
 
 function Recommendations() {
   const [items,setItems]=useState([]),[loading,setLoading]=useState(true);
-  useEffect(()=>api.get("/api/recommendations").then(r=>setItems(r.data)).finally(()=>setLoading(false)),[]);
+  useEffect(()=>api.get("/api/recommendations").then(r=>setItems(r.data)).catch(reportApiError).finally(()=>setLoading(false)),[]);
   return <><div className="page-heading"><div><span>Personal growth</span><h1>Learning recommendations</h1></div></div>{loading?<div className="loading-page">Loading...</div>:items.length===0?<div className="empty-state"><Target/><h2>No recommendations yet</h2><p>Your first prediction will generate a personalized improvement plan.</p><Link className="button primary" to="/predict">Create prediction</Link></div>:<div className="recommendation-list panel">{items.map((r,i)=><div className="recommendation" key={i}><span className={`priority ${r.priority.toLowerCase()}`}>{r.priority}</span><div><b>{r.area}</b><p>{r.action}</p><small>{r.benefit}</small></div><span className="status">{r.status}</span></div>)}</div>}</>;
 }
 
 function Profile() {
   const [profile,setProfile]=useState(null),[saved,setSaved]=useState(false);
-  useEffect(()=>api.get("/api/student/profile").then(r=>setProfile(r.data)).catch(()=>{}) ,[]);
-  const submit=async e=>{e.preventDefault();await api.put("/api/student/profile",profile);setSaved(true);setTimeout(()=>setSaved(false),2000)};
+  useEffect(()=>api.get("/api/student/profile").then(r=>setProfile(r.data)).catch(reportApiError) ,[]);
+  const submit=async e=>{e.preventDefault();try{await api.put("/api/student/profile",profile);setSaved(true);setTimeout(()=>setSaved(false),2000)}catch(err){reportApiError(err)}};
   if(!profile)return <div className="loading-page">Loading profile...</div>;
   const set=e=>setProfile({...profile,[e.target.name]:e.target.value});
   return <><div className="page-heading"><div><span>Account</span><h1>My profile</h1></div></div><article className="panel profile-panel">{saved&&<div className="toast">Profile updated</div>}<form onSubmit={submit}><div className="form-grid"><label>Full Name<input name="full_name" value={profile.full_name||""} onChange={set}/></label><label>Email Address<input value={profile.email||""} disabled/></label><label>Student ID<input name="student_id" value={profile.student_id||""} onChange={set}/></label><label>Institution<input name="institution_name" value={profile.institution_name||""} onChange={set}/></label><label>Department<input name="department" value={profile.department||""} onChange={set}/></label><label>Course<input name="course" value={profile.course||""} onChange={set}/></label><label>Semester<input name="semester" value={profile.semester||""} onChange={set}/></label><label>Academic Year<input name="academic_year" value={profile.academic_year||""} onChange={set}/></label></div><button className="button primary">Save changes</button></form></article></>;
@@ -308,7 +338,7 @@ function Profile() {
 
 function AdminOverview() {
   const [data,setData]=useState(null);
-  useEffect(()=>api.get("/api/admin/dashboard").then(r=>setData(r.data)).catch(()=>{}),[]);
+  useEffect(()=>api.get("/api/admin/dashboard").then(r=>setData(r.data)).catch(reportApiError),[]);
   if(!data)return <div className="loading-page">Loading administration...</div>;
   return <><div className="page-heading"><div><span>Control center</span><h1>Administrator overview</h1></div></div><StatCards items={[[Users,"Registered students",data.total_students],[History,"Total predictions",data.total_predictions],[ShieldCheck,"Active users",data.active_users],[Target,"Average predicted score",`${data.average_score}%`]]}/>
     <div className="chart-grid"><article className="panel"><h3>Performance category distribution</h3><ResponsiveContainer width="100%" height={300}><PieChart><Pie data={data.category_distribution} dataKey="value" nameKey="name" innerRadius={65} outerRadius={110} paddingAngle={4} fill="#7566F1"/><Tooltip/><Legend/></PieChart></ResponsiveContainer></article><article className="panel admin-note"><ShieldCheck/><h3>Role-based protection</h3><p>Administrator API endpoints require a valid administrator token and server-side role authorization.</p></article></div>
@@ -317,15 +347,15 @@ function AdminOverview() {
 
 function AdminUsers() {
   const [users,setUsers]=useState([]),[search,setSearch]=useState("");
-  useEffect(()=>api.get("/api/admin/users",{params:{search:search||undefined}}).then(r=>setUsers(r.data)).catch(()=>{}),[search]);
-  const toggle=async u=>{const r=await api.patch(`/api/admin/users/${u.id}/active`,null,{params:{active:!u.active}});setUsers(users.map(x=>x.id===u.id?{...x,active:r.data.active}:x))};
-  const remove=async u=>{if(!window.confirm(`Permanently delete ${u.full_name}?`))return;await api.delete(`/api/admin/users/${u.id}`);setUsers(users.filter(x=>x.id!==u.id))};
+  useEffect(()=>api.get("/api/admin/users",{params:{search:search||undefined}}).then(r=>setUsers(r.data)).catch(reportApiError),[search]);
+  const toggle=async u=>{try{const r=await api.patch(`/api/admin/users/${u.id}/active`,null,{params:{active:!u.active}});setUsers(users.map(x=>x.id===u.id?{...x,active:r.data.active}:x))}catch(err){reportApiError(err)}};
+  const remove=async u=>{if(!window.confirm(`Permanently delete ${u.full_name}?`))return;try{await api.delete(`/api/admin/users/${u.id}`);setUsers(users.filter(x=>x.id!==u.id))}catch(err){reportApiError(err)}};
   return <><div className="page-heading"><div><span>Management</span><h1>Students</h1></div></div><div className="filters"><input placeholder="Search name or email" value={search} onChange={e=>setSearch(e.target.value)}/></div><article className="panel"><div className="table-wrap"><table><thead><tr><th>Student</th><th>Email</th><th>Institution</th><th>Status</th><th>Action</th></tr></thead><tbody>{users.map(u=><tr key={u.id}><td><strong>{u.full_name}</strong></td><td>{u.email}</td><td>{u.institution_name||"—"}</td><td><span className={`badge ${u.active?"success":"danger"}`}>{u.active?"Active":"Inactive"}</span></td><td><button className="text-button" onClick={()=>toggle(u)}>{u.active?"Deactivate":"Activate"}</button><button className="text-button danger" onClick={()=>remove(u)}>Delete</button></td></tr>)}</tbody></table></div></article></>;
 }
 
 function AdminPredictions() {
   const [items,setItems]=useState([]);
-  useEffect(()=>api.get("/api/admin/predictions").then(r=>setItems(r.data)).catch(()=>{}),[]);
+  useEffect(()=>api.get("/api/admin/predictions").then(r=>setItems(r.data)).catch(reportApiError),[]);
   const exportCsv=()=>{
     const rows=[["ID","Student","Subject","Score","Category","Date"],...items.map(p=>[p.id,p.student_name,p.subject,p.predicted_score,p.performance_category,p.created_at])];
     const csv=rows.map(row=>row.map(value=>`"${String(value).replaceAll('"','""')}"`).join(",")).join("\n");
@@ -337,21 +367,21 @@ function AdminPredictions() {
 
 function AdminModels() {
   const [model,setModel]=useState(null);
-  useEffect(()=>api.get("/api/admin/models").then(r=>setModel(r.data)).catch(()=>{}),[]);
+  useEffect(()=>api.get("/api/admin/models").then(r=>setModel(r.data)).catch(reportApiError),[]);
   if(!model)return <div className="loading-page">Loading model information...</div>;
   return <><div className="page-heading"><div><span>Machine learning</span><h1>Model management</h1></div></div><StatCards items={[[BrainCircuit,"Model version",model.version],[BookOpen,"Training rows",model.training_rows],[Activity,"Test rows",model.test_rows],[Target,"R-squared",model.metrics.r2.toFixed(3)]]}/><div className="chart-grid"><article className="panel"><h3>Evaluation metrics</h3><div className="metric-grid"><div><span>MAE</span><strong>{model.metrics.mae.toFixed(2)}</strong></div><div><span>RMSE</span><strong>{model.metrics.rmse.toFixed(2)}</strong></div><div><span>MSE</span><strong>{model.metrics.mse.toFixed(2)}</strong></div><div><span>R²</span><strong>{model.metrics.r2.toFixed(3)}</strong></div></div></article><article className="panel"><h3>Dataset information</h3><p>{model.dataset}</p><p className="muted">A synthetic demonstration dataset is used because no repository dataset was available.</p></article></div></>;
 }
 
 function AdminAnalytics() {
   const [data,setData]=useState(null);
-  useEffect(()=>api.get("/api/admin/analytics").then(r=>setData(r.data)).catch(()=>{}),[]);
+  useEffect(()=>api.get("/api/admin/analytics").then(r=>setData(r.data)).catch(reportApiError),[]);
   if(!data)return <div className="loading-page">Loading analytics...</div>;
   return <><div className="page-heading"><div><span>Institutional insights</span><h1>Analytics</h1></div></div><article className="panel"><h3>Subject-wise performance</h3><ResponsiveContainer width="100%" height={320}><BarChart data={data.subject_performance}><CartesianGrid strokeDasharray="3 3"/><XAxis dataKey="subject"/><YAxis domain={[0,100]}/><Tooltip/><Bar dataKey="score" fill="#7566F1"/></BarChart></ResponsiveContainer></article></>;
 }
 
 function AdminAudit() {
   const [logs,setLogs]=useState([]);
-  useEffect(()=>api.get("/api/admin/audit-logs").then(r=>setLogs(r.data)).catch(()=>{}),[]);
+  useEffect(()=>api.get("/api/admin/audit-logs").then(r=>setLogs(r.data)).catch(reportApiError),[]);
   return <><div className="page-heading"><div><span>Security</span><h1>Audit log</h1></div></div><article className="panel"><div className="table-wrap"><table><thead><tr><th>Time</th><th>Actor</th><th>Action</th><th>Details</th></tr></thead><tbody>{logs.map(log=><tr key={log.id}><td>{new Date(log.created_at).toLocaleString()}</td><td>{log.actor_id||"—"}</td><td><strong>{log.action}</strong></td><td>{log.details||"—"}</td></tr>)}</tbody></table></div></article></>;
 }
 
@@ -359,11 +389,11 @@ function AdminSettings() {
   const [settings,setSettings]=useState(null);
   const [password,setPassword]=useState({current_password:"",new_password:""});
   const [status,setStatus]=useState("");
-  useEffect(()=>api.get("/api/admin/settings").then(r=>setSettings(r.data)).catch(()=>{}),[]);
+  useEffect(()=>api.get("/api/admin/settings").then(r=>setSettings(r.data)).catch(reportApiError),[]);
   const changePassword=async e=>{
     e.preventDefault();setStatus("");
     try{await api.post("/api/admin/change-password",password);setStatus("Administrator password updated.");setPassword({current_password:"",new_password:""})}
-    catch(err){setStatus(err.response?.data?.detail||"Unable to update password.");}
+    catch(err){setStatus(getApiErrorMessage(err));}
   };
   if(!settings)return <div className="loading-page">Loading settings...</div>;
   return <><div className="page-heading"><div><span>Administration</span><h1>Settings</h1></div></div><div className="chart-grid"><article className="panel"><h3>Application configuration</h3><div className="detail-grid"><div><span>Application</span><strong>{settings.application_name}</strong></div><div><span>Database</span><strong>{settings.database_configured?"Configured":"Local default"}</strong></div><div><span>Email provider</span><strong>{settings.email_reset_provider_configured?"Configured":"Not configured"}</strong></div><div><span>Admin username</span><strong>{settings.default_admin_username}</strong></div></div></article><article className="panel"><h3>Change administrator password</h3><form onSubmit={changePassword}><label>Current password<input type="password" value={password.current_password} onChange={e=>setPassword({...password,current_password:e.target.value})} required/></label><label>New password<input type="password" value={password.new_password} onChange={e=>setPassword({...password,new_password:e.target.value})} minLength={12} required/></label>{status&&<div className="alert">{status}</div>}<button className="button primary">Update password</button></form></article></div></>;
@@ -377,7 +407,9 @@ function Protected({auth,admin=false,children}) {
 
 export default function App() {
   const auth=useAuth();
-  return <Routes>
+  return <>
+    <ApiNotifications/>
+    <Routes>
     <Route path="/" element={<Landing/>}/>
     <Route path="/login" element={auth.user?(<Navigate to={auth.user.role==="admin"?"/admin":"/dashboard"} replace/>):<AuthPage mode="login" auth={auth}/>}/>
     <Route path="/register" element={auth.user?<Navigate to="/dashboard" replace/>:<AuthPage mode="register" auth={auth}/>}/>
@@ -397,5 +429,6 @@ export default function App() {
     <Route path="/admin/audit" element={<Protected auth={auth} admin><AdminAudit/></Protected>}/>
     <Route path="/admin/settings" element={<Protected auth={auth} admin><AdminSettings/></Protected>}/>
     <Route path="*" element={<Navigate to="/" replace/>}/>
-  </Routes>;
+    </Routes>
+  </>;
 }

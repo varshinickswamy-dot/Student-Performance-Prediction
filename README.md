@@ -81,6 +81,7 @@ npm run build
 - Set `VITE_API_BASE_URL` to the public HTTPS backend URL.
 - Deploy `backend/` to a compatible Python host such as Render or Railway.
 - Set `DATABASE_URL`, `JWT_SECRET_KEY`, `ADMIN_USERNAME`, `ADMIN_PASSWORD`, and `FRONTEND_URL`.
+- Set `ENVIRONMENT=production`; startup rejects the development JWT secret, missing frontend origin, and default administrator password.
 - Never commit `.env` files or secrets.
 
 See the documents in `docs/`.
