@@ -15,17 +15,17 @@ app = FastAPI(
     description="AI-powered student performance prediction and academic analytics.",
 )
 
-frontend_url = os.getenv(
+frontend_origins = os.getenv(
     "FRONTEND_URL",
-    "https://student-performance-prediction-flax-eight.vercel.app,"
+    "https://student-performance-prediction-amber.vercel.app,"
     "http://localhost:5173,http://127.0.0.1:5173",
 )
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[origin.strip() for origin in frontend_url.split(",")],
+    allow_origins=[origin.strip() for origin in frontend_origins.split(",") if origin.strip()],
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allow_headers=["Authorization", "Content-Type"],
 )
 app.include_router(router)
 

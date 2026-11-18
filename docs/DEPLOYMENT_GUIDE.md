@@ -28,4 +28,4 @@ Start command:
 uvicorn app.main:app --host 0.0.0.0 --port $PORT
 ```
 
-Set `DATABASE_URL`, `JWT_SECRET_KEY`, `ADMIN_USERNAME`, `ADMIN_PASSWORD`, and `FRONTEND_URL=https://student-performance-prediction-flax-eight.vercel.app`. Use a persistent PostgreSQL database for production.
+Set `DATABASE_URL`, `JWT_SECRET_KEY`, `ADMIN_USERNAME`, `ADMIN_PASSWORD`, and `FRONTEND_URL=https://student-performance-prediction-amber.vercel.app`. Use a persistent PostgreSQL database for production.

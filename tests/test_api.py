@@ -2,6 +2,10 @@ import os
 
 os.environ["DATABASE_URL"] = "sqlite:///./test_student_performance.db"
 os.environ["JWT_SECRET_KEY"] = "test-secret-key"
+os.environ["FRONTEND_URL"] = (
+    "https://student-performance-prediction-amber.vercel.app,"
+    "http://localhost:5173,http://127.0.0.1:5173"
+)
 
 from fastapi.testclient import TestClient
 from app.main import app
@@ -102,7 +106,7 @@ def test_password_reset_request_is_honest_without_email_provider():
 
 def test_vercel_and_local_vite_origins_are_allowed_by_cors():
     for origin in [
-        "https://student-performance-prediction-flax-eight.vercel.app",
+        "https://student-performance-prediction-amber.vercel.app",
         "http://localhost:5173",
         "http://127.0.0.1:5173",
     ]:
@@ -110,9 +114,26 @@ def test_vercel_and_local_vite_origins_are_allowed_by_cors():
             "/api/health",
             headers={
                 "Origin": origin,
-                "Access-Control-Request-Method": "GET",
-                "Access-Control-Request-Headers": "authorization",
+                "Access-Control-Request-Method": "POST",
+                "Access-Control-Request-Headers": "authorization,content-type",
             },
         )
         assert response.status_code == 200
         assert response.headers["access-control-allow-origin"] == origin
+        assert response.headers["access-control-allow-credentials"] == "true"
+        assert "POST" in response.headers["access-control-allow-methods"]
+        allowed_headers = response.headers["access-control-allow-headers"].lower()
+        assert "authorization" in allowed_headers
+        assert "content-type" in allowed_headers
+
+
+def test_cors_does_not_allow_unlisted_origins():
+    response = client.options(
+        "/api/health",
+        headers={
+            "Origin": "https://unlisted.example",
+            "Access-Control-Request-Method": "POST",
+            "Access-Control-Request-Headers": "authorization,content-type",
+        },
+    )
+    assert "access-control-allow-origin" not in response.headers

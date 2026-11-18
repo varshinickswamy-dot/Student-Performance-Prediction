@@ -82,7 +82,7 @@ npm run build
 - Set the Vercel environment variable `VITE_API_BASE_URL` to `https://student-performance-backend-nujh.onrender.com`.
 - Deploy `backend/` to a compatible Python host such as Render or Railway.
 - Set `DATABASE_URL`, `JWT_SECRET_KEY`, `ADMIN_USERNAME`, and `ADMIN_PASSWORD` in Render.
-- Set Render `FRONTEND_URL` to `https://student-performance-prediction-flax-eight.vercel.app`.
+- Set Render `FRONTEND_URL` to `https://student-performance-prediction-amber.vercel.app`.
 - Set `ENVIRONMENT=production`; startup rejects the development JWT secret, missing frontend origin, and default administrator password.
 - Never commit `.env` files or secrets.
 
