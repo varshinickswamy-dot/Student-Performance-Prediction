@@ -50,6 +50,11 @@ def test_registration_login_prediction_and_history():
     assert 0 <= body["predicted_score"] <= 100
     assert body["performance_category"] in {"Excellent", "Good", "Average", "Needs Improvement"}
 
+    recommendation_response = client.get("/api/recommendations", headers=headers)
+    assert recommendation_response.status_code == 200
+    assert recommendation_response.json() == body["recommendations"]
+    assert recommendation_response.json()
+
     history = client.get("/api/predictions/history", headers=headers)
     assert history.status_code == 200
     assert history.json()["total"] == 1

@@ -9,6 +9,7 @@ import {
   Area, AreaChart, Bar, BarChart, CartesianGrid, Legend,
   Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from "recharts";
+import { jsPDF } from "jspdf";
 import api, { getApiErrorMessage, reportApiError } from "./api";
 
 function useAuth() {
@@ -283,29 +284,134 @@ function PredictionDetail() {
   useEffect(()=>{api.get(`/api/predictions/${id}`).then(r=>setP(r.data)).catch(reportApiError)},[id]);
   const downloadReport=()=>{
     if(!p)return;
-    const lines=[
-      "EduPredict Academic Prediction Report",
-      `Prediction ID: ${p.id}`,
-      `Subject: ${p.subject}`,
-      `Semester: ${p.semester}`,
-      `Predicted score: ${p.predicted_score}/100`,
-      `Performance category: ${p.performance_category}`,
-      `Model: ${p.model_version}`,
-      `Date: ${new Date(p.created_at).toLocaleString()}`,
-      "",
-      "Input information:",
-      ...Object.entries(p.input_data).map(([key,value])=>`${key.replaceAll("_"," ")}: ${typeof value==="boolean"?(value?"Yes":"No"):value}`),
-      "",
-      "Recommendations:",
-      ...p.recommendations.map(r=>`- [${r.priority}] ${r.area}: ${r.action}`),
-    ];
-    const blob=new Blob([lines.join("\n")],{type:"text/plain;charset=utf-8"});
-    const url=URL.createObjectURL(blob);
-    const link=document.createElement("a");
-    link.href=url;
-    link.download=`edupredict-prediction-${p.id}.txt`;
-    link.click();
-    URL.revokeObjectURL(url);
+    const pdf=new jsPDF({orientation:"portrait",unit:"mm",format:"a4"});
+    const pageWidth=pdf.internal.pageSize.getWidth();
+    const pageHeight=pdf.internal.pageSize.getHeight();
+    const margin=17;
+    const contentWidth=pageWidth-margin*2;
+    let y=18;
+    pdf.setProperties({
+      title:`EduPredict Prediction Report - ${p.subject}`,
+      subject:"Academic performance prediction",
+      author:"EduPredict",
+    });
+    pdf.setFillColor(17,24,43);
+    pdf.roundedRect(margin,y,contentWidth,31,3,3,"F");
+    pdf.setTextColor(248,250,252);
+    pdf.setFont("helvetica","bold");
+    pdf.setFontSize(18);
+    pdf.text("EduPredict",margin+7,y+11);
+    pdf.setFont("helvetica","normal");
+    pdf.setFontSize(9);
+    pdf.text("ACADEMIC PERFORMANCE FORECAST",margin+7,y+20);
+    pdf.text(`Report #${p.id}`,pageWidth-margin-7,y+11,{align:"right"});
+    y+=40;
+
+    const ensureSpace=(height)=>{
+      if(y+height>pageHeight-20){
+        pdf.addPage();
+        y=19;
+      }
+    };
+    const addSection=(title)=>{
+      ensureSpace(13);
+      pdf.setTextColor(81,69,205);
+      pdf.setFont("helvetica","bold");
+      pdf.setFontSize(12);
+      pdf.text(title,margin,y);
+      y+=4;
+      pdf.setDrawColor(226,230,239);
+      pdf.line(margin,y,pageWidth-margin,y);
+      y+=6;
+    };
+    const addRow=(label,value)=>{
+      const wrapped=pdf.splitTextToSize(String(value),contentWidth-47);
+      const rowHeight=Math.max(6,wrapped.length*4.5);
+      ensureSpace(rowHeight+3);
+      pdf.setFontSize(9);
+      pdf.setTextColor(101,113,138);
+      pdf.setFont("helvetica","bold");
+      pdf.text(label,margin,y);
+      pdf.setTextColor(23,32,51);
+      pdf.setFont("helvetica","normal");
+      pdf.text(wrapped,margin+47,y);
+      y+=rowHeight+3;
+    };
+    const addRecommendation=(recommendation)=>{
+      const actionLines=pdf.splitTextToSize(recommendation.action,contentWidth-8);
+      const benefitLines=pdf.splitTextToSize(`Benefit: ${recommendation.benefit}`,contentWidth-8);
+      const blockHeight=8+actionLines.length*4.5+benefitLines.length*4.5+6;
+      ensureSpace(blockHeight);
+      pdf.setDrawColor(226,230,239);
+      pdf.setFillColor(255,255,255);
+      pdf.roundedRect(margin,y,contentWidth,blockHeight-2,2,2,"FD");
+      pdf.setFont("helvetica","bold");
+      pdf.setFontSize(10);
+      pdf.setTextColor(23,32,51);
+      pdf.text(`${recommendation.area}  |  ${recommendation.priority} priority`,margin+4,y+6);
+      pdf.setFont("helvetica","normal");
+      pdf.setFontSize(9);
+      pdf.text(actionLines,margin+4,y+12);
+      pdf.setTextColor(101,113,138);
+      pdf.text(benefitLines,margin+4,y+12+actionLines.length*4.5);
+      y+=blockHeight+3;
+    };
+
+    pdf.setFillColor(245,246,250);
+    pdf.roundedRect(margin,y,contentWidth,33,3,3,"F");
+    pdf.setTextColor(101,113,138);
+    pdf.setFont("helvetica","normal");
+    pdf.setFontSize(9);
+    pdf.text("PREDICTED SCORE",margin+6,y+9);
+    pdf.setTextColor(81,69,205);
+    pdf.setFont("helvetica","bold");
+    pdf.setFontSize(25);
+    pdf.text(`${p.predicted_score}/100`,margin+6,y+23);
+    pdf.setTextColor(23,32,51);
+    pdf.setFontSize(12);
+    pdf.text(p.performance_category,pageWidth-margin-6,y+18,{align:"right"});
+    pdf.setFont("helvetica","normal");
+    pdf.setFontSize(8);
+    pdf.setTextColor(101,113,138);
+    pdf.text("Model estimate - not an actual examination result",pageWidth-margin-6,y+25,{align:"right"});
+    y+=41;
+
+    addSection("Assessment details");
+    addRow("Subject",p.subject);
+    addRow("Semester",p.semester);
+    addRow("Prediction date",new Date(p.created_at).toLocaleString());
+    addRow("Model version",p.model_version);
+
+    addSection("Student inputs");
+    Object.entries(p.input_data).forEach(([key,value])=>{
+      if(key==="subject"||key==="semester")return;
+      const label=key.replaceAll("_"," ").replace(/\b\w/g,char=>char.toUpperCase());
+      addRow(label,typeof value==="boolean"?(value?"Yes":"No"):value);
+    });
+
+    addSection("Personalized recommendations");
+    p.recommendations.forEach(addRecommendation);
+
+    const totalPages=pdf.getNumberOfPages();
+    for(let page=1;page<=totalPages;page++){
+      pdf.setPage(page);
+      pdf.setDrawColor(226,230,239);
+      pdf.line(margin,pageHeight-14,pageWidth-margin,pageHeight-14);
+      pdf.setFont("helvetica","normal");
+      pdf.setFontSize(8);
+      pdf.setTextColor(101,113,138);
+      pdf.text("EduPredict - Academic decision support",margin,pageHeight-8);
+      pdf.text(`Page ${page} of ${totalPages}`,pageWidth-margin,pageHeight-8,{align:"right"});
+    }
+    const reportBlob=pdf.output("blob");
+    const reportUrl=URL.createObjectURL(reportBlob);
+    const downloadLink=document.createElement("a");
+    downloadLink.href=reportUrl;
+    downloadLink.download=`edupredict-prediction-${p.id}.pdf`;
+    document.body.appendChild(downloadLink);
+    downloadLink.click();
+    downloadLink.remove();
+    window.setTimeout(()=>URL.revokeObjectURL(reportUrl),1000);
   };
   if(!p)return <div className="loading-page"><span className="spinner"/>Loading result...</div>;
   return <><div className="page-heading"><div><span>Result</span><h1>Prediction #{p.id}</h1></div><div className="page-actions"><button className="button ghost" onClick={downloadReport}>Download Report</button><Link className="button ghost" to="/predict">Predict Again</Link><Link className="button primary" to="/predictions">View history</Link></div></div>
@@ -323,7 +429,12 @@ function Analytics() {
 
 function Recommendations() {
   const [items,setItems]=useState([]),[loading,setLoading]=useState(true);
-  useEffect(()=>api.get("/api/recommendations").then(r=>setItems(r.data)).catch(reportApiError).finally(()=>setLoading(false)),[]);
+  useEffect(()=>{
+    api.get("/api/recommendations")
+      .then(r=>setItems(r.data))
+      .catch(reportApiError)
+      .finally(()=>setLoading(false));
+  },[]);
   return <><div className="page-heading"><div><span>Personal growth</span><h1>Learning recommendations</h1></div></div>{loading?<div className="loading-page">Loading...</div>:items.length===0?<div className="empty-state"><Target/><h2>No recommendations yet</h2><p>Your first prediction will generate a personalized improvement plan.</p><Link className="button primary" to="/predict">Create prediction</Link></div>:<div className="recommendation-list panel">{items.map((r,i)=><div className="recommendation" key={i}><span className={`priority ${r.priority.toLowerCase()}`}>{r.priority}</span><div><b>{r.area}</b><p>{r.action}</p><small>{r.benefit}</small></div><span className="status">{r.status}</span></div>)}</div>}</>;
 }
 
