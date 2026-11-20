@@ -46,3 +46,23 @@ The endpoint checks prediction ownership and refuses to explain a prediction if 
 ## Compatibility contract
 
 The existing prediction endpoint and input schema remain unchanged. The explanation and simulation endpoints reuse the current model artifact and do not require a database schema migration. Existing prediction history remains readable. Any future model replacement must preserve the current input feature contract or introduce an explicitly versioned API/model contract with a migration and compatibility plan.
+
+
+## Offline candidate-model training
+
+A separate training command is provided at `backend/app/ml/train_candidate.py`. It requires an explicitly supplied CSV and never falls back to generated synthetic rows:
+
+```powershell
+cd backend
+$env:EDUPREDICT_DATASET_PATH="D:\\datasets\\authorized_student_records.csv"
+$env:EDUPREDICT_TARGET_COLUMN="score"
+python -m app.ml.train_candidate
+```
+
+The CSV must contain the existing feature contract plus the configured numeric target column (default `score`). Boolean inputs accept true/false, yes/no, or 1/0. Numeric feature ranges are validated. The trainer removes duplicate and incomplete rows, requires at least 100 complete unique records, and rejects targets outside 0–100.
+
+The trainer holds out 20% of the data before model selection, compares Ridge, Random Forest, Gradient Boosting and HistGradientBoosting using five-fold cross-validation on the training split, selects by mean cross-validation MAE, then evaluates the selected candidate once on the untouched test split. Preprocessing is inside the estimator pipeline. The report records data-quality counts, dataset fingerprint, model comparison and held-out metrics.
+
+The resulting candidate artifact and JSON report are saved under `backend/app/ml/model_artifacts/candidates/` by default. They do **not** replace `ridge_model.joblib`, change the live model version, or affect Render predictions. A candidate must undergo data provenance, privacy, leakage, representativeness, subgroup-error and compatibility review before any separately approved promotion process.
+
+Do not commit private student datasets or candidate artifacts containing private data. Keep dataset paths local or use a controlled, access-restricted training environment.
