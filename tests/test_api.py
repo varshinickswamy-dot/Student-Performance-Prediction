@@ -9,7 +9,9 @@ os.environ["FRONTEND_URL"] = (
 
 from fastapi.testclient import TestClient
 from app.main import app
-from app.database import Base, engine
+from app.database import Base, engine, SessionLocal
+from app.models import User
+from app.core.security import hash_password
 
 
 Base.metadata.drop_all(bind=engine)
@@ -170,3 +172,149 @@ def test_cors_does_not_allow_unlisted_origins():
         },
     )
     assert "access-control-allow-origin" not in response.headers
+
+
+
+def test_academic_intelligence_goals_notifications_and_assistant():
+    register = client.post("/api/auth/register", json={
+        "full_name": "Planner Student",
+        "email": "planner@example.com",
+        "password": "StrongPassword123",
+        "confirm_password": "StrongPassword123",
+        "institution_name": "Test University",
+    })
+    headers = {"Authorization": f"Bearer {register.json()['access_token']}"}
+
+    empty_risk = client.get("/api/student/risk-assessment", headers=headers)
+    assert empty_risk.status_code == 200
+    assert empty_risk.json()["status"] == "insufficient_data"
+
+    no_plan = client.post("/api/student/study-plan", headers=headers, json={
+        "available_hours_per_day": 2,
+    })
+    assert no_plan.status_code == 409
+
+    prediction = client.post("/api/predictions/predict", headers=headers, json={
+        "subject": "Mathematics", "semester": "3", "study_hours": 1,
+        "previous_marks": 42, "attendance": 58, "assignment_scores": 38,
+        "class_participation": 60, "homework_completion": 55,
+        "sleep_hours": 7, "extracurricular": False,
+        "internet_access": True, "family_support": True,
+    })
+    assert prediction.status_code == 200
+
+    risk = client.get("/api/student/risk-assessment", headers=headers)
+    assert risk.status_code == 200
+    assert risk.json()["risk_level"] == "high"
+    assert risk.json()["risk_points"] >= 4
+    assert "probability" in risk.json()["risk_scale"]
+
+    plan = client.post("/api/student/study-plan", headers=headers, json={
+        "available_hours_per_day": 2.5, "focus_subject": "Mathematics",
+    })
+    assert plan.status_code == 200
+    assert len(plan.json()["days"]) == 7
+    assert plan.json()["subject"] == "Mathematics"
+
+    goal = client.post("/api/student/goals", headers=headers, json={
+        "title": "Revise algebra", "subject": "Mathematics",
+    })
+    assert goal.status_code == 201
+    goal_id = goal.json()["id"]
+    assert client.get("/api/student/goals", headers=headers).json()[0]["id"] == goal_id
+    updated = client.patch(f"/api/student/goals/{goal_id}", headers=headers, json={
+        "status": "completed",
+    })
+    assert updated.status_code == 200
+    assert updated.json()["status"] == "completed"
+    assert client.delete(f"/api/student/goals/{goal_id}", headers=headers).status_code == 204
+
+    notifications = client.get("/api/student/notifications", headers=headers)
+    assert notifications.status_code == 200
+    assert isinstance(notifications.json(), list)
+
+    assistant = client.post("/api/assistant/chat", headers=headers, json={
+        "question": "How can I improve my attendance?",
+    })
+    assert assistant.status_code == 200
+    assert assistant.json()["provider"] == "built_in_contextual_fallback"
+    assert "58.0%" in assistant.json()["answer"]
+
+
+def test_teacher_portal_assignment_isolation_and_institution_analytics():
+    db = SessionLocal()
+    try:
+        admin = User(
+            full_name="Test Admin", email="portal-admin@example.com",
+            password_hash=hash_password("AdminPassword123!"),
+            role="admin", institution_name="Test University",
+        )
+        db.add(admin)
+        db.commit()
+    finally:
+        db.close()
+
+    admin_login = client.post("/api/auth/login", json={
+        "email": "portal-admin@example.com", "password": "AdminPassword123!",
+    })
+    admin_headers = {"Authorization": f"Bearer {admin_login.json()['access_token']}"}
+
+    student_response = client.post("/api/auth/register", json={
+        "full_name": "Assigned Student", "email": "assigned@example.com",
+        "password": "StrongPassword123", "confirm_password": "StrongPassword123",
+        "institution_name": "Test University",
+    })
+    student_id = student_response.json()["user"]["id"]
+
+    teacher_response = client.post("/api/admin/teachers", headers=admin_headers, json={
+        "full_name": "Assigned Teacher", "email": "teacher@example.com",
+        "password": "TeacherPassword123!", "institution_name": "Test University",
+    })
+    assert teacher_response.status_code == 201
+    teacher_id = teacher_response.json()["id"]
+
+    assignment = client.post(
+        f"/api/admin/teachers/{teacher_id}/assignments",
+        headers=admin_headers, json={"student_id": student_id},
+    )
+    assert assignment.status_code == 201
+
+    teacher_login = client.post("/api/auth/login", json={
+        "email": "teacher@example.com", "password": "TeacherPassword123!",
+    })
+    teacher_headers = {"Authorization": f"Bearer {teacher_login.json()['access_token']}"}
+    dashboard = client.get("/api/teacher/dashboard", headers=teacher_headers)
+    assert dashboard.status_code == 200
+    assert dashboard.json()["assigned_students"] == 1
+
+    note = client.post("/api/teacher/interventions", headers=teacher_headers, json={
+        "student_id": student_id, "note": "Discuss a weekly revision plan.",
+    })
+    assert note.status_code == 201
+    assert client.get(
+        f"/api/teacher/students/{student_id}/interventions",
+        headers=teacher_headers,
+    ).status_code == 200
+
+    unassigned = client.post("/api/teacher/interventions", headers=teacher_headers, json={
+        "student_id": student_id + 9999, "note": "Unauthorized note",
+    })
+    assert unassigned.status_code == 404
+    assert client.get("/api/admin/dashboard", headers=teacher_headers).status_code == 403
+
+    institution_response = client.post(
+        "/api/admin/institution-admins", headers=admin_headers, json={
+            "full_name": "Institution Admin", "email": "institution@example.com",
+            "password": "InstitutionPassword123!",
+            "institution_name": "Test University",
+        },
+    )
+    assert institution_response.status_code == 201
+    institution_login = client.post("/api/auth/login", json={
+        "email": "institution@example.com", "password": "InstitutionPassword123!",
+    })
+    institution_headers = {"Authorization": f"Bearer {institution_login.json()['access_token']}"}
+    analytics = client.get("/api/institution/analytics", headers=institution_headers)
+    assert analytics.status_code == 200
+    assert analytics.json()["student_count"] == 1
+    assert client.get("/api/teacher/dashboard", headers=institution_headers).status_code == 403
