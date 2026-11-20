@@ -16,11 +16,17 @@ app = FastAPI(
     description="AI-powered student performance prediction and academic analytics.",
 )
 
-frontend_origins = os.getenv(
-    "FRONTEND_URL",
-    "https://student-performance-prediction-amber.vercel.app,"
-    "http://localhost:5173,http://127.0.0.1:5173",
-)
+# Keep every active first-party frontend hostname explicitly allowlisted.
+# FRONTEND_URL can add deployment aliases, but must not accidentally remove
+# the current Vercel project domain when Render has a narrower env value.
+configured_frontend_origins = os.getenv("FRONTEND_URL", "")
+frontend_origins = ",".join(filter(None, [
+    configured_frontend_origins,
+    "https://varshinickswamy-dots-projects.vercel.app",
+    "https://student-performance-prediction-amber.vercel.app",
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
+]))
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[origin.strip() for origin in frontend_origins.split(",") if origin.strip()],
