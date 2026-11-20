@@ -1107,3 +1107,166 @@ def academic_activity_summary(
         ) if assignment_rows else None,
         "disclaimer": "These summaries reflect only activities the student has manually recorded; they are not an official institutional attendance or gradebook record.",
     }
+
+
+# Extended EduPredict academic intelligence APIs. These routes are additive:
+# they reuse existing authenticated records and never replace the deployed model.
+def require_student(user: User = Depends(get_current_user)) -> User:
+    if user.role != "student":
+        raise HTTPException(status_code=403, detail="Student access required")
+    return user
+
+
+@router.get("/api/student/digital-twin")
+def student_digital_twin(
+    user: User = Depends(require_student),
+    db: Session = Depends(get_db),
+):
+    predictions = _student_predictions(db, user.id, limit=12)
+    goals = db.query(StudyGoal).filter(StudyGoal.user_id == user.id).all()
+    activities = db.query(AcademicActivity).filter(
+        AcademicActivity.user_id == user.id
+    ).order_by(AcademicActivity.occurred_on.desc()).limit(500).all()
+    return digital_twin_snapshot(user, predictions, goals, activities)
+
+
+@router.get("/api/student/recovery-plan")
+def student_recovery_plan(
+    user: User = Depends(require_student),
+    db: Session = Depends(get_db),
+):
+    return recovery_plan(_student_predictions(db, user.id, limit=10))
+
+
+@router.post("/api/student/exam-preparation")
+def student_exam_preparation(
+    payload: ExamPrepRequest,
+    user: User = Depends(require_student),
+):
+    from datetime import date
+    if payload.exam_date < date.today():
+        raise HTTPException(status_code=422, detail="Exam date must be today or in the future.")
+    if (payload.exam_date - date.today()).days > 90:
+        raise HTTPException(status_code=422, detail="Exam date must be within the next 90 days.")
+    try:
+        return exam_preparation_plan(
+            payload.subject, payload.exam_date, payload.hours_per_day, payload.topics
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+
+
+@router.post("/api/student/question-generator")
+def student_question_generator(
+    payload: QuestionGeneratorRequest,
+    user: User = Depends(require_student),
+):
+    return practice_questions(
+        payload.subject, payload.topic, payload.difficulty, payload.count
+    )
+
+
+@router.post("/api/student/career-readiness")
+def student_career_readiness(
+    payload: CareerReadinessRequest,
+    user: User = Depends(require_student),
+):
+    return career_readiness(payload)
+
+
+@router.post("/api/student/scholarship-matches")
+def student_scholarship_matches(
+    payload: ScholarshipScreenRequest,
+    user: User = Depends(require_student),
+):
+    return scholarship_pathways(payload)
+
+
+@router.get("/api/teacher/intelligence")
+def teacher_intelligence(
+    teacher: User = Depends(require_teacher),
+    db: Session = Depends(get_db),
+):
+    assignments = db.query(TeacherAssignment).filter(
+        TeacherAssignment.teacher_id == teacher.id
+    ).all()
+    student_ids = [assignment.student_id for assignment in assignments]
+    rows = []
+    support_counts = {"high": 0, "moderate": 0, "low": 0, "insufficient_data": 0}
+    score_values = []
+    for student_id in student_ids:
+        student = db.get(User, student_id)
+        if not student or student.role != "student":
+            continue
+        predictions = _student_predictions(db, student_id, limit=10)
+        risk = build_academic_risk_assessment(predictions)
+        level = risk.get("risk_level") or "insufficient_data"
+        support_counts[level] = support_counts.get(level, 0) + 1
+        latest = predictions[0] if predictions else None
+        if latest:
+            score_values.append(float(latest.predicted_score))
+        rows.append({
+            "student_id": student.id,
+            "student_name": student.full_name,
+            "course": student.course,
+            "semester": student.semester,
+            "latest_model_estimate": float(latest.predicted_score) if latest else None,
+            "support_level": level,
+            "support_factors": len(risk.get("factors", [])),
+            "latest_assessment_date": latest.created_at.isoformat() if latest else None,
+        })
+    return {
+        "institution": teacher.institution_name,
+        "assigned_student_count": len(rows),
+        "students_with_assessments": len(score_values),
+        "average_model_estimate": round(sum(score_values) / len(score_values), 1) if score_values else None,
+        "support_distribution": support_counts,
+        "assigned_students": rows,
+        "notice": "Only students explicitly assigned to this teacher are included. Estimates use the currently deployed model; rule-based support levels are not validated probabilities and must not be used for punitive decisions.",
+    }
+
+
+@router.get("/api/institution/intelligence")
+def institution_intelligence(
+    institution_admin: User = Depends(require_institution_admin),
+    db: Session = Depends(get_db),
+):
+    institution = (institution_admin.institution_name or "").strip()
+    if not institution:
+        raise HTTPException(status_code=409, detail="Set an institution name on this account before viewing institution intelligence.")
+    students = db.query(User).filter(
+        User.role == "student",
+        func.lower(User.institution_name) == institution.casefold(),
+    ).all()
+    student_ids = [student.id for student in students]
+    predictions = db.query(Prediction).filter(
+        Prediction.user_id.in_(student_ids)
+    ).all() if student_ids else []
+    score_values = [float(item.predicted_score) for item in predictions]
+    department_counts = {}
+    semester_counts = {}
+    for student in students:
+        department = (student.department or "Unspecified").strip()
+        semester = (student.semester or "Unspecified").strip()
+        department_counts[department] = department_counts.get(department, 0) + 1
+        semester_counts[semester] = semester_counts.get(semester, 0) + 1
+    # Suppress small groups to reduce re-identification risk in small cohorts.
+    safe_departments = [
+        {"department": name, "student_count": count}
+        for name, count in sorted(department_counts.items()) if count >= 5
+    ]
+    safe_semesters = [
+        {"semester": name, "student_count": count}
+        for name, count in sorted(semester_counts.items()) if count >= 5
+    ]
+    return {
+        "institution": institution,
+        "student_count": len(students),
+        "assessment_count": len(predictions),
+        "students_with_assessments": len({item.user_id for item in predictions}),
+        "average_model_estimate": round(sum(score_values) / len(score_values), 1) if score_values else None,
+        "department_distribution": safe_departments,
+        "semester_distribution": safe_semesters,
+        "small_group_suppression_threshold": 5,
+        "notice": "Institution-wide aggregate estimates only. Groups smaller than five students are suppressed. These are model estimates, not verified grades or validated institutional outcome measures.",
+    }
