@@ -456,6 +456,19 @@ function PredictionDetail() {
       addRow(label,typeof value==="boolean"?(value?"Yes":"No"):value);
     });
 
+    addSection("Model explanation");
+    addRow("Dataset provenance",explanation?.dataset||"Explanation not available at report generation time");
+    addRow("Explanation method",explanation?.method||"Not available");
+    if(explanation?.contributions?.length){
+      explanation.contributions.forEach(item=>{
+        const label=item.feature.replaceAll("_"," ").replace(/\b\w/g,char=>char.toUpperCase());
+        addRow(label,`${item.contribution>0?"+":""}${item.contribution.toFixed(2)} model points · ${item.direction}`);
+      });
+      addRow("Interpretation",explanation.disclaimer||"Feature contributions are model-specific and not causal.");
+    }else{
+      addRow("Interpretation","No model explanation was available when this report was generated.");
+    }
+
     addSection("Personalized recommendations");
     p.recommendations.forEach(addRecommendation);
 
