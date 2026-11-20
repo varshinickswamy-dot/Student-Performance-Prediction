@@ -209,7 +209,7 @@ function AppShell({ auth, admin=false, children }) {
   const items = admin ? [
     ["/admin",LayoutDashboard,"Overview"],["/admin/users",Users,"Students"],["/admin/predictions",History,"Predictions"],["/admin/models",BrainCircuit,"ML Models"],["/admin/analytics",BarChart3,"Analytics"],["/admin/audit",ClipboardList,"Audit Log"],["/admin/settings",Settings,"Settings"]
   ] : [
-    ["/dashboard",LayoutDashboard,"Overview"],["/predict",Target,"Predict Performance"],["/predictions",History,"My Predictions"],["/analytics",BarChart3,"Academic Analytics"],["/recommendations",Activity,"Recommendations"],["/profile",UserRound,"My Profile"]
+    ["/dashboard",LayoutDashboard,"Overview"],["/predict",Target,"Predict Performance"],["/simulate",Activity,"What-if Simulator"],["/predictions",History,"My Predictions"],["/analytics",BarChart3,"Academic Analytics"],["/recommendations",Activity,"Recommendations"],["/profile",UserRound,"My Profile"]
   ];
   return (
     <div className="app-shell">
@@ -265,6 +265,58 @@ function PredictionForm() {
     </form></article></>;
 }
 
+function WhatIfSimulator() {
+  const defaults={subject:"Mathematics",semester:"1",study_hours:4,previous_marks:70,attendance:85,assignment_scores:75,class_participation:70,homework_completion:80,sleep_hours:7,extracurricular:false,internet_access:true,family_support:true};
+  const [baseline,setBaseline]=useState(defaults);
+  const [scenario,setScenario]=useState({...defaults,study_hours:6,attendance:90,assignment_scores:82});
+  const [result,setResult]=useState(null);
+  const [loading,setLoading]=useState(false);
+  const [error,setError]=useState("");
+  const fields=[
+    ["study_hours","Study hours per day",0,16,0.5],
+    ["previous_marks","Previous marks",0,100,1],
+    ["attendance","Attendance (%)",0,100,1],
+    ["assignment_scores","Assignment scores",0,100,1],
+    ["class_participation","Class participation",0,100,1],
+    ["homework_completion","Homework completion",0,100,1],
+    ["sleep_hours","Sleep hours",0,16,0.5],
+  ];
+  const update=(setter,key,value)=>setter(current=>({...current,[key]:value}));
+  const submit=async()=>{
+    setLoading(true);setError("");setResult(null);
+    try{
+      const response=await api.post("/api/predictions/simulate",{
+        baseline:{...baseline,subject:baseline.subject.trim(),semester:String(baseline.semester)},
+        scenario:{...scenario,subject:baseline.subject.trim(),semester:String(baseline.semester)},
+      });
+      setResult(response.data);
+    }catch(err){setError(getApiErrorMessage(err))}
+    finally{setLoading(false)}
+  };
+  const renderFields=(values,setter,label)=><article className="panel simulator-card">
+    <h3>{label}</h3>
+    {fields.map(([key,title,min,max,step])=><label className="simulator-field" key={key}>{title}<input type="number" min={min} max={max} step={step} value={values[key]} onChange={e=>update(setter,key,Number(e.target.value))}/></label>)}
+    <div className="toggle-grid">
+      {["extracurricular","internet_access","family_support"].map(key=><label className="checkbox" key={key}><input type="checkbox" checked={values[key]} onChange={e=>update(setter,key,e.target.checked)}/>{key.replaceAll("_"," ")}</label>)}
+    </div>
+  </article>;
+  return <>
+    <div className="page-heading"><div><span>Scenario planning</span><h1>What-if performance simulator</h1></div></div>
+    <article className="panel"><div className="form-grid">
+      <label>Subject<input value={baseline.subject} onChange={e=>{setBaseline(v=>({...v,subject:e.target.value}));setScenario(v=>({...v,subject:e.target.value}))}} required/></label>
+      <label>Semester<select value={baseline.semester} onChange={e=>{setBaseline(v=>({...v,semester:e.target.value}));setScenario(v=>({...v,semester:e.target.value}))}}>{[1,2,3,4,5,6,7,8].map(v=><option key={v} value={String(v)}>{v}</option>)}</select></label>
+    </div></article>
+    <div className="simulator-grid">{renderFields(baseline,setBaseline,"Current baseline")}{renderFields(scenario,setScenario,"Proposed scenario")}</div>
+    {error&&<div className="alert">{error}</div>}
+    <button className="button primary" disabled={loading||!baseline.subject.trim()} onClick={submit}>{loading?"Comparing scenarios...":"Compare scenarios"}</button>
+    {result&&<article className="panel simulator-result"><span className="eyebrow">Same deployed model · {result.model_version}</span><div className="simulator-result-grid">
+      <div><span>Current estimate</span><strong>{result.baseline_score.toFixed(1)}</strong></div>
+      <div><span>Scenario estimate</span><strong>{result.scenario_score.toFixed(1)}</strong></div>
+      <div><span>Estimated difference</span><strong className={result.change>=0?"positive":"negative"}>{result.change>0?"+":""}{result.change.toFixed(1)}</strong></div>
+    </div><p className="muted">{result.disclaimer}</p><p className="muted">Dataset: {result.dataset}. {result.is_synthetic_demo?"Demonstration data only; this is not validated evidence about real student outcomes.":""}</p></article>}
+  </>;
+}
+
 function PredictionHistory() {
   const navigate=useNavigate();const [data,setData]=useState({items:[],total:0});
   const [search,setSearch]=useState("");const [category,setCategory]=useState("");
@@ -281,7 +333,16 @@ function PredictionHistory() {
 function PredictionDetail() {
   const {id}=useParams();
   const [p,setP]=useState(null);
+  const [explanation,setExplanation]=useState(null);
+  const [explanationError,setExplanationError]=useState("");
   useEffect(()=>{api.get(`/api/predictions/${id}`).then(r=>setP(r.data)).catch(reportApiError)},[id]);
+  useEffect(()=>{
+    setExplanation(null);
+    setExplanationError("");
+    api.get(`/api/predictions/${id}/explanation`)
+      .then(r=>setExplanation(r.data))
+      .catch(err=>setExplanationError(getApiErrorMessage(err)));
+  },[id]);
   const downloadReport=async()=>{
     if(!p)return;
     const pdf=new jsPDF({orientation:"portrait",unit:"mm",format:"a4"});
@@ -428,10 +489,21 @@ function PredictionDetail() {
     // a manually-created Blob URL and an immediately-revoked download anchor.
     pdf.save(filename);
   };
+  const maxImpact=explanation?Math.max(...explanation.contributions.map(item=>Math.abs(item.contribution)),0.01):1;
   if(!p)return <div className="loading-page"><span className="spinner"/>Loading result...</div>;
   return <><div className="page-heading"><div><span>Result</span><h1>Prediction #{p.id}</h1></div><div className="page-actions"><button className="button ghost" onClick={downloadReport}>Download Report</button><Link className="button ghost" to="/predict">Predict Again</Link><Link className="button primary" to="/predictions">View history</Link></div></div>
     <div className="result-grid"><article className="score-card"><span>Predicted academic score</span><div className="score-ring" style={{"--score":`${p.predicted_score*3.6}deg`}}><b>{p.predicted_score}</b><small>/100</small></div><span className="badge">{p.performance_category}</span><p>Model estimate · {p.model_version}</p></article>
     <article className="panel"><div className="panel-heading"><div><span>Assessment information</span><h3>{p.subject}</h3></div></div><div className="detail-grid">{Object.entries(p.input_data).filter(([k])=>k!=="subject"&&k!=="semester").map(([k,v])=><div key={k}><span>{k.replaceAll("_"," ")}</span><strong>{typeof v==="boolean"?v?"Yes":"No":v}</strong></div>)}</div></article></div>
+    {explanation?<article className="panel explanation-panel">
+      <div className="panel-heading"><div><span>Explainable AI</span><h3>What influenced this estimate?</h3></div><span className="badge">Ridge model</span></div>
+      <p className="muted explanation-note">Feature contributions show how this model's inputs move its estimate relative to the training-data baseline. They are not causal effects.</p>
+      <div className="explanation-baseline"><span>Model baseline</span><strong>{explanation.baseline_score.toFixed(1)}</strong><span>Estimated output: {explanation.predicted_score.toFixed(1)} / 100</span></div>
+      <div className="contribution-list">{explanation.contributions.map(item=><div className="contribution-row" key={item.feature}>
+        <div className="contribution-heading"><span>{item.feature.replaceAll("_"," ")}</span><strong className={item.direction}>{item.contribution>0?"+":""}{item.contribution.toFixed(2)}</strong></div>
+        <div className="contribution-track"><div className={`contribution-fill ${item.direction}`} style={{width:`${Math.max(2,Math.abs(item.contribution)/maxImpact*100)}%`}}/></div>
+      </div>)}</div>
+      <p className="muted explanation-note">Dataset: {explanation.dataset}. {explanation.disclaimer}</p>
+    </article>:explanationError?<article className="panel"><h3>Prediction explanation unavailable</h3><p className="muted">{explanationError}</p></article>:null}
     <article className="panel"><div className="panel-heading"><div><span>Next steps</span><h3>Personalized recommendations</h3></div></div><div className="recommendation-list">{p.recommendations.map((r,i)=><div className="recommendation" key={i}><span className={`priority ${r.priority.toLowerCase()}`}>{r.priority}</span><div><b>{r.area}</b><p>{r.action}</p><small>{r.benefit}</small></div></div>)}</div></article>
   </>;
 }
@@ -542,6 +614,7 @@ export default function App() {
     <Route path="/admin/login" element={auth.user?(<Navigate to={auth.user.role==="admin"?"/admin":"/dashboard"} replace/>):<AuthPage mode="admin" auth={auth}/>}/>
     <Route path="/dashboard" element={<Protected auth={auth}><Dashboard/></Protected>}/>
     <Route path="/predict" element={<Protected auth={auth}><PredictionForm/></Protected>}/>
+    <Route path="/simulate" element={<Protected auth={auth}><WhatIfSimulator/></Protected>}/>
     <Route path="/predictions" element={<Protected auth={auth}><PredictionHistory/></Protected>}/>
     <Route path="/predictions/:id" element={<Protected auth={auth}><PredictionDetail/></Protected>}/>
     <Route path="/analytics" element={<Protected auth={auth}><Analytics/></Protected>}/>
