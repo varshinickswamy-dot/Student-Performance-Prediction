@@ -25,6 +25,13 @@ from app.ml.academic_intelligence import (
     build_academic_risk_assessment, build_weekly_study_plan,
     build_student_notifications,
 )
+from app.academic_extension_schemas import (
+    ExamPrepRequest, QuestionGeneratorRequest, CareerReadinessRequest, ScholarshipScreenRequest,
+)
+from app.ml.academic_extensions import (
+    digital_twin_snapshot, recovery_plan, exam_preparation_plan, practice_questions,
+    career_readiness, scholarship_pathways,
+)
 
 router = APIRouter()
 
