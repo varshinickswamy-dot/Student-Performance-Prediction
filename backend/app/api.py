@@ -403,6 +403,9 @@ def admin_models(admin: User = Depends(require_admin)):
         "model_type": "Ridge regression",
         "is_synthetic_demo": "synthetic" in artifact["dataset"].lower(),
         "evaluation_note": "Metrics are measured on a held-out split of the documented dataset; synthetic-demo metrics are not evidence of real-world student performance.",
+        "candidate_training_configured": bool(os.getenv("EDUPREDICT_DATASET_PATH")),
+        "candidate_training_command": "python -m app.ml.train_candidate",
+        "live_model_replaced_by_candidate_training": False,
     }
 
 
