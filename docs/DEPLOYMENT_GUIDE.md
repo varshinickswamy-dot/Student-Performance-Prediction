@@ -43,3 +43,32 @@ After a backend deployment, verify both the existing health endpoint and readine
 
 - `GET /api/predictions/{prediction_id}/explanation` requires the owning student's JWT. It returns an additive decomposition from the same Ridge artifact used for the saved prediction. A model-version mismatch returns HTTP 409 rather than presenting a misleading explanation.
 - `POST /api/predictions/simulate` accepts `baseline` and `scenario` objects with the existing prediction input schema. Subject and semester must match. The endpoint does not create database records and returns a clear model/dataset disclaimer.
+
+
+## New academic intelligence and role workflows
+
+The latest backend adds additive tables for study goals, teacher/student assignments, teacher intervention notes, and student activity logs. Startup uses SQLAlchemy `create_all` to create missing tables; it does not drop or reset existing user, prediction, or audit data. Confirm the Render database account has permission to create tables. For future changes to existing columns, use a reviewed migration rather than relying on `create_all`.
+
+New student endpoints include:
+
+- `GET /api/student/risk-assessment`
+- `POST /api/student/study-plan`
+- `GET /api/student/notifications`
+- `GET/POST /api/student/goals`
+- `PATCH/DELETE /api/student/goals/{goal_id}`
+- `GET/POST /api/student/activities`
+- `GET /api/student/activities/summary`
+- `DELETE /api/student/activities/{activity_id}`
+- `POST /api/assistant/chat`
+
+Teacher and institution workflows:
+
+- System administrators create teacher accounts with `POST /api/admin/teachers` and institution administrators with `POST /api/admin/institution-admins`.
+- Assign students using `POST /api/admin/teachers/{teacher_id}/assignments`. The API requires matching institution names.
+- Teacher routes expose only assigned students and assigned-student intervention notes.
+- Institution administrators receive institution-filtered aggregate model-estimate analytics.
+- The system administrator can list staff using `GET /api/admin/teaching-staff`.
+
+The assistant works without an external provider using a contextual built-in fallback. To enable an OpenAI-compatible provider, configure `AI_API_KEY`, `AI_MODEL`, and optionally `AI_API_BASE_URL` as Render environment variables. Keep the key server-side only; production provider URLs must use HTTPS. If these values are not configured or the provider is unavailable, the built-in fallback remains active. Only configure an external provider after reviewing its data handling and obtaining any required user notice/consent.
+
+The academic support assessment uses explicit rules and recorded model estimates. It returns support points, not calibrated probabilities. Student-entered activity logs are self-reported and must not be treated as official attendance or institutional grade records.
