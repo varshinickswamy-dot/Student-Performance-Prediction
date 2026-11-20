@@ -314,6 +314,47 @@ def analytics_subjects(user: User = Depends(get_current_user), db: Session = Dep
     return [{"subject": subject, "score": round(float(avg), 1)} for subject, avg in rows]
 
 
+@router.get("/api/analytics/heatmap")
+def analytics_heatmap(
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    rows = db.query(
+        Prediction.subject,
+        Prediction.semester,
+        func.avg(Prediction.predicted_score),
+        func.count(Prediction.id),
+    ).filter(
+        Prediction.user_id == user.id
+    ).group_by(Prediction.subject, Prediction.semester).order_by(
+        Prediction.semester, Prediction.subject
+    ).all()
+    return [{
+        "subject": subject, "semester": semester,
+        "average_model_estimate": round(float(average), 1),
+        "assessment_count": count,
+    } for subject, semester, average, count in rows]
+
+
+@router.get("/api/analytics/semester-comparison")
+def analytics_semester_comparison(
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    rows = db.query(
+        Prediction.semester,
+        func.avg(Prediction.predicted_score),
+        func.count(Prediction.id),
+    ).filter(
+        Prediction.user_id == user.id
+    ).group_by(Prediction.semester).all()
+    return [{
+        "semester": semester,
+        "average_model_estimate": round(float(average), 1),
+        "assessment_count": count,
+    } for semester, average, count in rows]
+
+
 @router.get("/api/analytics/trends")
 def analytics_trends(user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     items = db.query(Prediction).filter(Prediction.user_id == user.id).order_by(Prediction.created_at).all()
