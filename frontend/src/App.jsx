@@ -282,7 +282,7 @@ function PredictionDetail() {
   const {id}=useParams();
   const [p,setP]=useState(null);
   useEffect(()=>{api.get(`/api/predictions/${id}`).then(r=>setP(r.data)).catch(reportApiError)},[id]);
-  const downloadReport=()=>{
+  const downloadReport=async()=>{
     if(!p)return;
     const pdf=new jsPDF({orientation:"portrait",unit:"mm",format:"a4"});
     const pageWidth=pdf.internal.pageSize.getWidth();
@@ -403,15 +403,30 @@ function PredictionDetail() {
       pdf.text("EduPredict - Academic decision support",margin,pageHeight-8);
       pdf.text(`Page ${page} of ${totalPages}`,pageWidth-margin,pageHeight-8,{align:"right"});
     }
+    const filename=`edupredict-prediction-${p.id}.pdf`;
     const reportBlob=pdf.output("blob");
-    const reportUrl=URL.createObjectURL(reportBlob);
-    const downloadLink=document.createElement("a");
-    downloadLink.href=reportUrl;
-    downloadLink.download=`edupredict-prediction-${p.id}.pdf`;
-    document.body.appendChild(downloadLink);
-    downloadLink.click();
-    downloadLink.remove();
-    window.setTimeout(()=>URL.revokeObjectURL(reportUrl),1000);
+    const reportFile=new File([reportBlob],filename,{type:"application/pdf"});
+
+    // Prefer the native share/save sheet on mobile browsers that support PDF file sharing.
+    // This avoids relying on a synthetic anchor click for a Blob URL, which is unreliable
+    // in some mobile and embedded browsers.
+    if(navigator.share && navigator.canShare?.({files:[reportFile]})){
+      try{
+        await navigator.share({
+          files:[reportFile],
+          title:`EduPredict Prediction Report - ${p.subject}`,
+          text:`Academic performance prediction report #${p.id}`,
+        });
+        return;
+      }catch(shareError){
+        if(shareError?.name==="AbortError")return;
+        console.warn("Native PDF sharing failed; falling back to jsPDF save.",shareError);
+      }
+    }
+
+    // jsPDF's save helper handles browser-specific download behavior better than
+    // a manually-created Blob URL and an immediately-revoked download anchor.
+    pdf.save(filename);
   };
   if(!p)return <div className="loading-page"><span className="spinner"/>Loading result...</div>;
   return <><div className="page-heading"><div><span>Result</span><h1>Prediction #{p.id}</h1></div><div className="page-actions"><button className="button ghost" onClick={downloadReport}>Download Report</button><Link className="button ghost" to="/predict">Predict Again</Link><Link className="button primary" to="/predictions">View history</Link></div></div>
