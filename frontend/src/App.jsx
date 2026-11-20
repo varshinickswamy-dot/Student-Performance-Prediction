@@ -215,7 +215,7 @@ function AppShell({ auth, admin=false, children }) {
   ] : role==="institution_admin" ? [
     ["/institution",BarChart3,"Institution Analytics"],["/profile",UserRound,"My Profile"]
   ] : [
-    ["/dashboard",LayoutDashboard,"Overview"],["/predict",Target,"Predict Performance"],["/simulate",Activity,"What-if Simulator"],["/risk",ShieldAlert,"Risk Assessment"],["/study-plan",CalendarDays,"Study Planner"],["/goals",CheckCircle2,"Study Goals"],["/assistant",Bot,"AI Assistant"],["/notifications",Bell,"Notifications"],["/predictions",History,"My Predictions"],["/analytics",BarChart3,"Academic Analytics"],["/recommendations",Activity,"Recommendations"],["/profile",UserRound,"My Profile"]
+    ["/dashboard",LayoutDashboard,"Overview"],["/predict",Target,"Predict Performance"],["/simulate",Activity,"What-if Simulator"],["/risk",ShieldAlert,"Risk Assessment"],["/study-plan",CalendarDays,"Study Planner"],["/activities",ClipboardList,"Activity Tracker"],["/goals",CheckCircle2,"Study Goals"],["/assistant",Bot,"AI Assistant"],["/notifications",Bell,"Notifications"],["/predictions",History,"My Predictions"],["/analytics",BarChart3,"Academic Analytics"],["/recommendations",Activity,"Recommendations"],["/profile",UserRound,"My Profile"]
   ];
   return (
     <div className="app-shell">
@@ -553,6 +553,30 @@ function StudyPlannerPage() {
   </>;
 }
 
+function AcademicActivityPage() {
+  const today=new Date().toISOString().slice(0,10);
+  const [summary,setSummary]=useState(null),[items,setItems]=useState([]),[loading,setLoading]=useState(true),[error,setError]=useState("");
+  const [form,setForm]=useState({activity_type:"study_session",subject:"",value:1,occurred_on:today,notes:""});
+  const load=()=>Promise.all([api.get("/api/student/activities/summary"),api.get("/api/student/activities")]).then(([a,b])=>{setSummary(a.data);setItems(b.data)}).catch(err=>setError(getApiErrorMessage(err))).finally(()=>setLoading(false));
+  useEffect(()=>{load()},[]);
+  const submit=async e=>{e.preventDefault();setError("");try{await api.post("/api/student/activities",{...form,value:Number(form.value)});setForm(v=>({...v,value:v.activity_type==="attendance"?1:1,notes:""}));load()}catch(err){setError(getApiErrorMessage(err))}};
+  const remove=async item=>{try{await api.delete(`/api/student/activities/${item.id}`);load()}catch(err){setError(getApiErrorMessage(err))}};
+  return <><div className="page-heading"><div><span>Personal academic record</span><h1>Study & activity tracker</h1></div></div>
+    {summary&&<><StatCards items={[[BookOpen,"Study hours · last 7 days",summary.study_hours_last_7_days],[Users,"Classes recorded",summary.attendance_classes_recorded],[Target,"Recorded attendance",summary.recorded_attendance_percentage===null?"—":`${summary.recorded_attendance_percentage}%`],[ClipboardList,"Average assignment score",summary.average_assignment_score===null?"—":summary.average_assignment_score]]}/><p className="muted">{summary.disclaimer}</p></>}
+    <article className="panel"><h3>Record an activity</h3>{error&&<div className="alert">{error}</div>}<form className="form-grid" onSubmit={submit}>
+      <label>Activity type<select value={form.activity_type} onChange={e=>setForm({...form,activity_type:e.target.value,value:1})}><option value="study_session">Study session (hours)</option><option value="attendance">Class attendance</option><option value="assignment">Assignment score (%)</option></select></label>
+      <label>Subject<input value={form.subject} onChange={e=>setForm({...form,subject:e.target.value})} required minLength={2}/></label>
+      <label>{form.activity_type==="study_session"?"Hours studied":form.activity_type==="attendance"?"Attendance status":"Assignment score (%)"}
+        {form.activity_type==="attendance"?<select value={form.value} onChange={e=>setForm({...form,value:Number(e.target.value)})}><option value={1}>Present</option><option value={0}>Absent</option></select>:<input type="number" min="0" max={form.activity_type==="study_session"?16:100} step="0.5" value={form.value} onChange={e=>setForm({...form,value:e.target.value})} required/>}
+      </label>
+      <label>Date<input type="date" value={form.occurred_on} onChange={e=>setForm({...form,occurred_on:e.target.value})} required/></label>
+      <label>Notes (optional)<input value={form.notes} onChange={e=>setForm({...form,notes:e.target.value})} maxLength={1000}/></label>
+      <button className="button primary">Save activity</button>
+    </form></article>
+    <article className="panel"><h3>Recent recorded activities</h3>{loading?<p>Loading activity history...</p>:items.length===0?<p className="muted">No activity recorded yet. Add a study session, attendance entry or assignment score above.</p>:<div className="table-wrap"><table><thead><tr><th>Date</th><th>Type</th><th>Subject</th><th>Value</th><th>Notes</th><th/></tr></thead><tbody>{items.map(item=><tr key={item.id}><td>{item.occurred_on}</td><td>{item.activity_type.replace("_"," ")}</td><td>{item.subject}</td><td>{item.activity_type==="attendance"?(item.value===1?"Present":"Absent"):item.activity_type==="study_session"?`${item.value} hrs`:`${item.value}%`}</td><td>{item.notes||"—"}</td><td><button className="text-button danger" onClick={()=>remove(item)}>Delete</button></td></tr>)}</tbody></table></div>}</article>
+  </>;
+}
+
 function StudyGoalsPage() {
   const [goals,setGoals]=useState([]),[form,setForm]=useState({title:"",subject:"",target_date:"",description:""}),[loading,setLoading]=useState(true),[error,setError]=useState("");
   const load=()=>api.get("/api/student/goals").then(r=>setGoals(r.data)).catch(e=>setError(getApiErrorMessage(e))).finally(()=>setLoading(false));
@@ -698,6 +722,7 @@ export default function App() {
     <Route path="/simulate" element={<Protected auth={auth}><WhatIfSimulator/></Protected>}/>
     <Route path="/risk" element={<Protected auth={auth} roles={["student"]}><AcademicRiskPage/></Protected>}/>
     <Route path="/study-plan" element={<Protected auth={auth} roles={["student"]}><StudyPlannerPage/></Protected>}/>
+    <Route path="/activities" element={<Protected auth={auth} roles={["student"]}><AcademicActivityPage/></Protected>}/>
     <Route path="/goals" element={<Protected auth={auth} roles={["student"]}><StudyGoalsPage/></Protected>}/>
     <Route path="/assistant" element={<Protected auth={auth} roles={["student"]}><AcademicAssistantPage/></Protected>}/>
     <Route path="/notifications" element={<Protected auth={auth} roles={["student"]}><StudentNotificationsPage/></Protected>}/>
