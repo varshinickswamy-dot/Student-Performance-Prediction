@@ -503,7 +503,7 @@ def test_candidate_training_supports_grouped_student_records():
 def test_candidate_dataset_audit_counts_duplicates_and_missing_rows():
     frame = synthetic_training_frame(rows=180)
     frame = pd.concat(
-        [frame, frame.iloc[[0]], frame.iloc[[1]].assign(study_hours=np.nan)],
+        [frame, frame.iloc[[0]], frame.iloc[[1]].assign(study_hours=float("nan"))],
         ignore_index=True,
     )
     _, _, quality, _ = _prepare_dataset(frame, target_column="score")
@@ -518,6 +518,7 @@ def test_candidate_dataset_audit_counts_duplicates_and_missing_rows():
 def test_candidate_dataset_rejects_invalid_boolean_and_target_feature_overlap():
     frame = synthetic_training_frame(rows=180)
     invalid_boolean = frame.copy()
+    invalid_boolean["internet_access"] = invalid_boolean["internet_access"].astype(object)
     invalid_boolean.loc[0, "internet_access"] = "sometimes"
     with pytest.raises(ValueError, match="unsupported values"):
         train_candidate_from_frame(invalid_boolean, source_fingerprint="invalid-boolean")
