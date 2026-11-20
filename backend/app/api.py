@@ -726,6 +726,22 @@ def require_institution_admin(user: User = Depends(get_current_user)) -> User:
     return user
 
 
+@router.get("/api/admin/teaching-staff")
+def list_teaching_staff(
+    admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    staff = db.query(User).filter(
+        User.role.in_(["teacher", "institution_admin"])
+    ).order_by(User.created_at.desc()).all()
+    return [{
+        "id": person.id, "full_name": person.full_name,
+        "email": person.email, "role": person.role,
+        "institution_name": person.institution_name,
+        "department": person.department, "active": person.active,
+    } for person in staff]
+
+
 @router.post("/api/admin/teachers", status_code=201)
 def create_teacher(
     payload: TeacherCreate,
