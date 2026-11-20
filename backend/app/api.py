@@ -13,7 +13,7 @@ from app.schemas import (
     LoginRequest, PredictionInput, PredictionResponse, ProfileUpdate,
     RegisterRequest, PredictionSimulationInput, TokenResponse, UserResponse,
     StudyGoalCreate, StudyGoalUpdate, StudyPlanRequest, AssistantQuestion,
-    TeacherCreate, TeacherAssignmentCreate, InterventionNoteCreate,
+    TeacherCreate, TeacherAssignmentCreate, InterventionNoteCreate, AcademicActivityCreate,
 )
 from app.core.security import (
     JWT_ALGORITHM, JWT_SECRET_KEY, create_access_token,
