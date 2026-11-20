@@ -16,6 +16,7 @@ from app.models import User
 from app.core.security import hash_password
 from app.ml.predictor import synthetic_training_frame
 from app.ml.train_candidate import train_candidate_from_frame
+import app.api as api_module
 
 
 Base.metadata.drop_all(bind=engine)
@@ -418,3 +419,42 @@ def test_semester_analytics_are_scoped_to_authenticated_student():
     comparison = client.get("/api/analytics/semester-comparison", headers=headers)
     assert comparison.status_code == 200
     assert {item["semester"] for item in comparison.json()} == {"1", "2"}
+
+
+
+def test_external_assistant_provider_requires_explicit_per_request_consent(monkeypatch):
+    registered = client.post("/api/auth/register", json={
+        "full_name": "Consent Student", "email": "consent@example.com",
+        "password": "StrongPassword123", "confirm_password": "StrongPassword123",
+    })
+    headers = {"Authorization": f"Bearer {registered.json()['access_token']}"}
+    monkeypatch.setenv("AI_API_KEY", "test-only-provider-key")
+    monkeypatch.setenv("AI_MODEL", "test-model")
+    calls = []
+
+    class FakeResponse:
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            return {"choices": [{"message": {"content": "Use short focused study sessions."}}]}
+
+    def fake_post(url, headers, json, timeout):
+        calls.append(json)
+        return FakeResponse()
+
+    monkeypatch.setattr(api_module.httpx, "post", fake_post)
+    fallback = client.post("/api/assistant/chat", headers=headers, json={
+        "question": "How should I study?",
+    })
+    assert fallback.status_code == 200
+    assert fallback.json()["provider"] == "built_in_contextual_fallback"
+    assert calls == []
+
+    consented = client.post("/api/assistant/chat", headers=headers, json={
+        "question": "How should I study?", "allow_external_processing": True,
+    })
+    assert consented.status_code == 200
+    assert consented.json()["provider"] == "configured_llm"
+    assert len(calls) == 1
+    assert "student_name" not in calls[0]["messages"][1]["content"]
