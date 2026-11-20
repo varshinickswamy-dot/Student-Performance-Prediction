@@ -21,6 +21,10 @@ def test_health_and_model_training():
     response = client.get("/api/health")
     assert response.status_code == 200
     assert response.json()["status"] == "ok"
+    ready = client.get("/api/health/ready")
+    assert ready.status_code == 200
+    assert ready.json()["checks"]["database"] == "available"
+    assert ready.json()["checks"]["model"] == "available"
 
 
 def test_registration_login_prediction_and_history():
@@ -66,6 +70,32 @@ def test_registration_login_prediction_and_history():
     student_detail = client.get(f"/api/predictions/{body['id']}", headers=headers)
     assert student_detail.status_code == 200
 
+    explanation = client.get(
+        f"/api/predictions/{body['id']}/explanation", headers=headers
+    )
+    assert explanation.status_code == 200
+    explanation_body = explanation.json()
+    assert explanation_body["model_version"] == body["model_version"]
+    assert explanation_body["is_causal"] is False
+    assert len(explanation_body["contributions"]) == 10
+    reconstructed = explanation_body["baseline_score"] + sum(
+        item["contribution"] for item in explanation_body["contributions"]
+    )
+    assert abs(reconstructed - explanation_body["raw_model_output"]) < 0.01
+
+    baseline_input = body["input_data"]
+    scenario_input = {**baseline_input, "study_hours": 7}
+    simulation = client.post(
+        "/api/predictions/simulate",
+        headers=headers,
+        json={"baseline": baseline_input, "scenario": scenario_input},
+    )
+    assert simulation.status_code == 200
+    assert simulation.json()["saved"] is False
+    assert simulation.json()["model_version"] == body["model_version"]
+    assert simulation.json()["scenario_score"] >= 0
+    assert client.get("/api/predictions/history", headers=headers).json()["total"] == 1
+
     other_user = client.post("/api/auth/register", json={
         "full_name": "Other Student",
         "email": "other-student@example.com",
@@ -78,6 +108,9 @@ def test_registration_login_prediction_and_history():
     ).status_code == 404
     assert client.delete(
         f"/api/predictions/{body['id']}", headers=other_headers
+    ).status_code == 404
+    assert client.get(
+        f"/api/predictions/{body['id']}/explanation", headers=other_headers
     ).status_code == 404
 
 
