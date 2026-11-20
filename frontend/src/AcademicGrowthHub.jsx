@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { Activity, Award, BookOpen, BriefcaseBusiness, CalendarDays, CheckCircle2, Compass, GraduationCap, Lightbulb, RefreshCw, ShieldAlert, Sparkles, Target } from "lucide-react";
 import api, { getApiErrorMessage } from "./api";
+import "./growth.css";
 
 const todayLocal = () => {
   const now = new Date();
