@@ -329,7 +329,7 @@ def train_candidate_from_frame(
         "candidate_comparison": comparison,
         "software": {"scikit_learn": sklearn.__version__, "numpy": np.__version__, "pandas": pd.__version__},
         "limitations": [
-            "This is a candidate artifact and does not replace the live production artifact.",
+            "This is a candidate artifact and does not replace the live model or live production artifact.",
             "Verify dataset provenance, consent/legal basis, target meaning, and representativeness before use.",
             "Held-out metrics describe this dataset and split only; they do not guarantee future or institutional performance.",
             "Correlation flags are screening signals, not proof of leakage; review flagged features with subject-matter experts.",
