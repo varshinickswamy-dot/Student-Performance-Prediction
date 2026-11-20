@@ -14,6 +14,7 @@ EduPredict is a full-stack academic analytics application for student performanc
 - Student profile management\n- Rule-based academic support assessment with transparent factors (not a validated probability)\n- Seven-day personalized study planner based on the student's latest saved inputs\n- Persistent study goals with completion tracking\n- Student-entered study-session, attendance and assignment activity tracker with 7-day/30-day summaries\n- Subject-by-semester heatmap and semester comparison analytics\n- Contextual academic assistant with a built-in fallback and optional server-side OpenAI-compatible provider\n- Dynamic notifications for support indicators and upcoming/overdue study goals\n- Role-separated teacher and institution workspaces with assigned-student isolation and intervention notes
 - Role-based administrator dashboard, teacher account provisioning, student assignment management, and audit logs
 - Vercel-compatible frontend and independently deployable FastAPI backend
+- Separate final-exam candidate estimator UI at `/final-exam`, backed by an authenticated, opt-in API; it never replaces the original deployed model
 - Prediction report download and paginated history
 - Downloadable, formatted PDF prediction reports
 - Administrator audit logs, settings, password management, exports, and student safeguards
@@ -87,7 +88,7 @@ npm run build
 - Set the Vercel environment variable `VITE_API_BASE_URL` to `https://student-performance-backend-nujh.onrender.com`.
 - Deploy `backend/` to a compatible Python host such as Render or Railway.
 - Set `DATABASE_URL`, `JWT_SECRET_KEY`, `ADMIN_USERNAME`, and `ADMIN_PASSWORD` in Render.
-- Set Render `FRONTEND_URL` to `https://student-performance-prediction-amber.vercel.app`.
+- Set Render `FRONTEND_URL` to your active Vercel deployment origin(s), comma-separated. The backend also explicitly allows the current project domain `https://varshinickswamy-dots-projects.vercel.app` and the earlier production alias.
 - Set `ENVIRONMENT=production`; startup rejects the development JWT secret, missing frontend origin, and default administrator password.
 - Never commit `.env` files or secrets.
 
@@ -113,3 +114,12 @@ This remains an offline candidate workflow. It does not retrain or replace the d
 ## Synthetic student dataset candidate benchmark
 
 An anonymized generated CSV can be evaluated offline with `python -m app.ml.train_student_candidate` after setting `EDUPREDICT_STUDENT_DATASET_PATH`. This candidate predicts `final_exam_score` from pre-final academic inputs, excludes IDs/demographics/derived outcomes, and uses student-group-isolated evaluation. It is deliberately separate from the deployed Ridge model because its feature contract differs. See [Synthetic Dataset Benchmark](docs/SYNTHETIC_DATASET_BENCHMARK.md). No Render environment change or production model promotion is required.
+
+
+## Final-exam candidate estimator
+
+The student workspace includes a separate estimator at `/final-exam`. It sends the ten pre-final features to the authenticated `POST /api/student/final-exam-prediction` endpoint. The API validates the candidate artifact's feature contract and synthetic-data provenance before inference.
+
+To enable this optional endpoint on a backend host, first create and review the local candidate using the instructions in [Synthetic Dataset Benchmark](docs/SYNTHETIC_DATASET_BENCHMARK.md), then securely provide the candidate Joblib artifact to the backend and set `EDUPREDICT_STUDENT_CANDIDATE_ARTIFACT` to its absolute path. Do not commit the artifact or the source CSV. If the variable or file is absent, the endpoint returns HTTP 503 with a clear message; it does not generate a placeholder prediction. The UI therefore remains safely unavailable until the reviewed artifact is configured.
+
+Every returned score is labelled as a synthetic demonstration estimate. It is not validated for real students and must not be used for grading, admissions, scholarship, disciplinary, or other high-impact decisions.
