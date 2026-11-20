@@ -1,4 +1,5 @@
 import os
+from datetime import date, timedelta
 import pandas as pd
 import pytest
 
@@ -295,6 +296,10 @@ def test_teacher_portal_assignment_isolation_and_institution_analytics():
     dashboard = client.get("/api/teacher/dashboard", headers=teacher_headers)
     assert dashboard.status_code == 200
     assert dashboard.json()["assigned_students"] == 1
+    intelligence = client.get("/api/teacher/intelligence", headers=teacher_headers)
+    assert intelligence.status_code == 200
+    assert intelligence.json()["assigned_student_count"] == 1
+    assert intelligence.json()["assigned_students"][0]["student_id"] == student_id
 
     note = client.post("/api/teacher/interventions", headers=teacher_headers, json={
         "student_id": student_id, "note": "Discuss a weekly revision plan.",
@@ -326,6 +331,10 @@ def test_teacher_portal_assignment_isolation_and_institution_analytics():
     analytics = client.get("/api/institution/analytics", headers=institution_headers)
     assert analytics.status_code == 200
     assert analytics.json()["student_count"] >= 1
+    aggregate = client.get("/api/institution/intelligence", headers=institution_headers)
+    assert aggregate.status_code == 200
+    assert aggregate.json()["student_count"] >= 1
+    assert "assigned_students" not in aggregate.json()
     assert client.get("/api/teacher/dashboard", headers=institution_headers).status_code == 403
 
 
@@ -476,3 +485,82 @@ def test_candidate_training_supports_grouped_student_records():
     assert report["quality"]["unique_groups"] == 100
     assert "GroupShuffleSplit" in report["split"]["strategy"]
     assert artifact["training_rows"] + artifact["test_rows"] == 300
+
+
+def test_extended_student_growth_lab_endpoints():
+    registration = client.post("/api/auth/register", json={
+        "full_name": "Growth Lab Student", "email": "growth-lab@example.com",
+        "password": "StrongPassword123", "confirm_password": "StrongPassword123",
+        "institution_name": "Growth University", "course": "Computer Science",
+        "semester": "5",
+    })
+    assert registration.status_code == 201
+    headers = {"Authorization": f"Bearer {registration.json()['access_token']}"}
+
+    no_auth = client.get("/api/student/digital-twin")
+    assert no_auth.status_code == 401
+
+    prediction = client.post("/api/predictions/predict", headers=headers, json={
+        "subject": "Mathematics", "semester": "5", "study_hours": 1.5,
+        "previous_marks": 48, "attendance": 62, "assignment_scores": 52,
+        "class_participation": 65, "homework_completion": 55, "sleep_hours": 7,
+        "extracurricular": False, "internet_access": True, "family_support": True,
+    })
+    assert prediction.status_code == 200
+
+    twin = client.get("/api/student/digital-twin", headers=headers)
+    assert twin.status_code == 200
+    assert twin.json()["status"] == "initialized"
+    assert twin.json()["latest_assessment"]["prediction_id"] == prediction.json()["id"]
+    assert twin.json()["timeline"]
+
+    recovery = client.get("/api/student/recovery-plan", headers=headers)
+    assert recovery.status_code == 200
+    assert recovery.json()["status"] == "generated"
+    assert len(recovery.json()["weeks"]) == 4
+
+    exam = client.post("/api/student/exam-preparation", headers=headers, json={
+        "subject": "Mathematics",
+        "exam_date": (date.today() + timedelta(days=3)).isoformat(),
+        "hours_per_day": 2,
+        "topics": ["Algebra", "Calculus"],
+    })
+    assert exam.status_code == 200
+    assert len(exam.json()["schedule"]) == 4
+
+    invalid_exam = client.post("/api/student/exam-preparation", headers=headers, json={
+        "subject": "Mathematics", "exam_date": (date.today() - timedelta(days=1)).isoformat(),
+        "topics": ["Algebra"],
+    })
+    assert invalid_exam.status_code == 422
+
+    questions = client.post("/api/student/question-generator", headers=headers, json={
+        "subject": "Computer Science", "topic": "Database normalization",
+        "difficulty": "hard", "count": 4,
+    })
+    assert questions.status_code == 200
+    assert len(questions.json()["questions"]) == 4
+    assert "not questions from a real" in questions.json()["notice"]
+
+    career = client.post("/api/student/career-readiness", headers=headers, json={
+        "target_role": "AI/ML Engineer",
+        "skills": ["Python", "Machine Learning", "Pandas"],
+        "projects_count": 2, "internship_experience": False, "portfolio_ready": True,
+    })
+    assert career.status_code == 200
+    assert career.json()["skill_coverage_percentage"] > 0
+    assert career.json()["suggested_skill_gaps"]
+
+    scholarships = client.post("/api/student/scholarship-matches", headers=headers, json={
+        "academic_percentage": 82, "course_area": "Information Technology",
+        "annual_income_band": "undisclosed", "state": "Karnataka",
+    })
+    assert scholarships.status_code == 200
+    pathways = [item["pathway"] for item in scholarships.json()["potential_pathways"]]
+    assert "Merit-based scholarships" in pathways
+    assert "State and domicile-based schemes" in pathways
+    assert "not a list of verified live awards" in scholarships.json()["disclaimer"]
+
+    # Student accounts cannot access staff-only intelligence endpoints.
+    assert client.get("/api/teacher/intelligence", headers=headers).status_code == 403
+    assert client.get("/api/institution/intelligence", headers=headers).status_code == 403
