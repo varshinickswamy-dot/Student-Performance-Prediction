@@ -59,6 +59,8 @@ New student endpoints include:
 - `GET/POST /api/student/activities`
 - `GET /api/student/activities/summary`
 - `DELETE /api/student/activities/{activity_id}`
+- `GET /api/analytics/heatmap`
+- `GET /api/analytics/semester-comparison`
 - `POST /api/assistant/chat`
 
 Teacher and institution workflows:
