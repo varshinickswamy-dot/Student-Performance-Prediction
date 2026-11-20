@@ -450,6 +450,64 @@ def admin_models(admin: User = Depends(require_admin)):
     }
 
 
+@router.get("/api/admin/model-monitoring")
+def admin_model_monitoring(
+    admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    """Exploratory input-distribution monitoring; not a performance or fairness audit."""
+    artifact = train()
+    records = db.query(Prediction).order_by(Prediction.created_at.desc()).limit(5000).all()
+    if len(records) < 30:
+        return {
+            "status": "insufficient_data",
+            "prediction_records_reviewed": len(records),
+            "minimum_records": 30,
+            "reference_dataset": artifact.get("dataset", "unknown"),
+            "features": [],
+            "notice": "At least 30 saved predictions are required for this exploratory input-distribution check.",
+        }
+
+    scaler = artifact["pipeline"].named_steps.get("scaler")
+    if scaler is None:
+        return {
+            "status": "unavailable",
+            "prediction_records_reviewed": len(records),
+            "features": [],
+            "notice": "The active model does not expose a compatible feature scaler for this diagnostic.",
+        }
+
+    import numpy as np
+    feature_rows = []
+    for name in artifact["features"]:
+        values = []
+        for record in records:
+            value = record.input_data.get(name)
+            if value is not None:
+                values.append(float(bool(value)) if name in {"extracurricular", "internet_access", "family_support"} else float(value))
+        if not values:
+            continue
+        index = artifact["features"].index(name)
+        reference_mean = float(scaler.mean_[index])
+        reference_scale = max(float(scaler.scale_[index]), 1e-9)
+        shift = abs(float(np.mean(values)) - reference_mean) / reference_scale
+        feature_rows.append({
+            "feature": name,
+            "observed_mean": round(float(np.mean(values)), 3),
+            "reference_mean": round(reference_mean, 3),
+            "mean_shift_in_reference_standard_deviations": round(shift, 3),
+            "review_flag": shift >= 1.5,
+        })
+
+    return {
+        "status": "exploratory",
+        "prediction_records_reviewed": len(records),
+        "reference_dataset": artifact.get("dataset", "unknown"),
+        "features": feature_rows,
+        "notice": "This compares saved input averages with the model's training reference. It is not a validated drift test, does not measure model accuracy, and the current reference is synthetic demonstration data.",
+    }
+
+
 @router.get("/api/admin/analytics")
 def admin_analytics(admin: User = Depends(require_admin), db: Session = Depends(get_db)):
     predictions = db.query(Prediction).all()
