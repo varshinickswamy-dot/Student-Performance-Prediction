@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import date, datetime
 from typing import Any
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
@@ -125,3 +125,11 @@ class TeacherAssignmentCreate(BaseModel):
 class InterventionNoteCreate(BaseModel):
     student_id: int = Field(gt=0)
     note: str = Field(min_length=3, max_length=3000)
+
+
+class AcademicActivityCreate(BaseModel):
+    activity_type: str = Field(pattern="^(study_session|attendance|assignment)$")
+    subject: str = Field(min_length=2, max_length=100)
+    value: float = Field(ge=0, le=100)
+    occurred_on: date = Field(default_factory=date.today)
+    notes: str | None = Field(default=None, max_length=1000)
