@@ -84,3 +84,44 @@ class PredictionResponse(BaseModel):
     recommendations: list[dict[str, Any]]
     model_version: str
     created_at: datetime
+
+
+class StudyGoalCreate(BaseModel):
+    title: str = Field(min_length=3, max_length=160)
+    description: str | None = Field(default=None, max_length=2000)
+    subject: str | None = Field(default=None, max_length=100)
+    target_date: datetime | None = None
+
+
+class StudyGoalUpdate(BaseModel):
+    title: str | None = Field(default=None, min_length=3, max_length=160)
+    description: str | None = Field(default=None, max_length=2000)
+    subject: str | None = Field(default=None, max_length=100)
+    target_date: datetime | None = None
+    status: str | None = Field(default=None, pattern="^(pending|in_progress|completed)$")
+
+
+class StudyPlanRequest(BaseModel):
+    available_hours_per_day: float = Field(default=2.0, ge=0.5, le=8.0)
+    focus_subject: str | None = Field(default=None, min_length=1, max_length=100)
+
+
+class AssistantQuestion(BaseModel):
+    question: str = Field(min_length=3, max_length=1200)
+
+
+class TeacherCreate(BaseModel):
+    full_name: str = Field(min_length=2, max_length=120)
+    email: EmailStr
+    password: str = Field(min_length=12, max_length=128)
+    institution_name: str = Field(min_length=2, max_length=255)
+    department: str | None = Field(default=None, max_length=255)
+
+
+class TeacherAssignmentCreate(BaseModel):
+    student_id: int = Field(gt=0)
+
+
+class InterventionNoteCreate(BaseModel):
+    student_id: int = Field(gt=0)
+    note: str = Field(min_length=3, max_length=3000)
