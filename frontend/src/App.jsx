@@ -3,7 +3,7 @@ import { Link, Navigate, Route, Routes, useNavigate, useParams } from "react-rou
 import {
   Activity, BarChart3, BookOpen, ChevronRight, GraduationCap, History,
   LayoutDashboard, LogOut, Menu, Moon, ShieldCheck, Sun, Target,
-  TrendingUp, UserRound, Users, X, BrainCircuit, Settings, ClipboardList,
+  TrendingUp, UserRound, Users, X, BrainCircuit, Settings, ClipboardList, Sparkles,
   CalendarDays, ShieldAlert, Bell, Bot, MessageSquare, CheckCircle2, Plus,
 } from "lucide-react";
 import {
@@ -12,6 +12,7 @@ import {
 } from "recharts";
 import { jsPDF } from "jspdf";
 import api, { getApiErrorMessage, reportApiError } from "./api";
+import AcademicGrowthHub from "./AcademicGrowthHub";
 
 function useAuth() {
   const [user, setUser] = useState(() => {
@@ -211,11 +212,11 @@ function AppShell({ auth, admin=false, children }) {
   const items = admin ? [
     ["/admin",LayoutDashboard,"Overview"],["/admin/users",Users,"Students"],["/admin/teaching",GraduationCap,"Teaching Staff"],["/admin/predictions",History,"Predictions"],["/admin/models",BrainCircuit,"ML Models"],["/admin/analytics",BarChart3,"Analytics"],["/admin/audit",ClipboardList,"Audit Log"],["/admin/settings",Settings,"Settings"]
   ] : role==="teacher" ? [
-    ["/teacher",LayoutDashboard,"Teacher Overview"],["/teacher/students",Users,"Assigned Students"],["/profile",UserRound,"My Profile"]
+    ["/teacher",LayoutDashboard,"Teacher Overview"],["/teacher/students",Users,"Assigned Students"],["/teacher/intelligence",BrainCircuit,"Teaching Intelligence"],["/profile",UserRound,"My Profile"]
   ] : role==="institution_admin" ? [
-    ["/institution",BarChart3,"Institution Analytics"],["/profile",UserRound,"My Profile"]
+    ["/institution",BarChart3,"Institution Analytics"],["/institution/intelligence",BrainCircuit,"Institution Intelligence"],["/profile",UserRound,"My Profile"]
   ] : [
-    ["/dashboard",LayoutDashboard,"Overview"],["/predict",Target,"Predict Performance"],["/simulate",Activity,"What-if Simulator"],["/risk",ShieldAlert,"Risk Assessment"],["/study-plan",CalendarDays,"Study Planner"],["/activities",ClipboardList,"Activity Tracker"],["/goals",CheckCircle2,"Study Goals"],["/assistant",Bot,"AI Assistant"],["/notifications",Bell,"Notifications"],["/predictions",History,"My Predictions"],["/analytics",BarChart3,"Academic Analytics"],["/recommendations",Activity,"Recommendations"],["/profile",UserRound,"My Profile"]
+    ["/dashboard",LayoutDashboard,"Overview"],["/growth-lab",Sparkles,"AI Growth Lab"],["/predict",Target,"Predict Performance"],["/simulate",Activity,"What-if Simulator"],["/risk",ShieldAlert,"Risk Assessment"],["/study-plan",CalendarDays,"Study Planner"],["/activities",ClipboardList,"Activity Tracker"],["/goals",CheckCircle2,"Study Goals"],["/assistant",Bot,"AI Assistant"],["/notifications",Bell,"Notifications"],["/predictions",History,"My Predictions"],["/analytics",BarChart3,"Academic Analytics"],["/recommendations",Activity,"Recommendations"],["/profile",UserRound,"My Profile"]
   ];
   return (
     <div className="app-shell">
@@ -730,9 +731,35 @@ function AdminSettings() {
   return <><div className="page-heading"><div><span>Administration</span><h1>Settings</h1></div></div><div className="chart-grid"><article className="panel"><h3>Application configuration</h3><div className="detail-grid"><div><span>Application</span><strong>{settings.application_name}</strong></div><div><span>Database</span><strong>{settings.database_configured?"Configured":"Local default"}</strong></div><div><span>Email provider</span><strong>{settings.email_reset_provider_configured?"Configured":"Not configured"}</strong></div><div><span>Admin username</span><strong>{settings.default_admin_username}</strong></div></div></article><article className="panel"><h3>Change administrator password</h3><form onSubmit={changePassword}><label>Current password<input type="password" value={password.current_password} onChange={e=>setPassword({...password,current_password:e.target.value})} required/></label><label>New password<input type="password" value={password.new_password} onChange={e=>setPassword({...password,new_password:e.target.value})} minLength={12} required/></label>{status&&<div className="alert">{status}</div>}<button className="button primary">Update password</button></form></article></div></>;
 }
 
-function Protected({auth,admin=false,children}) {
+
+function TeacherIntelligencePage() {
+  const [data,setData]=useState(null);
+  useEffect(()=>api.get("/api/teacher/intelligence").then(r=>setData(r.data)).catch(reportApiError),[]);
+  if(!data)return <div className="loading-page">Loading teaching intelligence…</div>;
+  const distribution=data.support_distribution||{};
+  return <><div className="page-heading"><div><span>Assigned cohort · {data.institution||"Institution not set"}</span><h1>Teaching Intelligence</h1></div></div>
+    <StatCards items={[[Users,"Assigned students",data.assigned_student_count],[BookOpen,"Students with assessments",data.students_with_assessments],[Target,"Average model estimate",data.average_model_estimate===null?"—":`${data.average_model_estimate}%`],[ShieldAlert,"High support indicators",distribution.high||0]]}/>
+    <article className="panel"><h3>Support indicator distribution</h3><div className="growth-metric-grid"><div><span>High</span><strong>{distribution.high||0}</strong></div><div><span>Moderate</span><strong>{distribution.moderate||0}</strong></div><div><span>Low</span><strong>{distribution.low||0}</strong></div><div><span>Insufficient data</span><strong>{distribution.insufficient_data||0}</strong></div></div><p className="muted">{data.notice}</p></article>
+    <article className="panel"><h3>Assigned student support overview</h3>{data.assigned_students.length?<div className="table-wrap"><table><thead><tr><th>Student</th><th>Course</th><th>Semester</th><th>Model estimate</th><th>Support indicator</th><th>Factors</th></tr></thead><tbody>{data.assigned_students.map(student=><tr key={student.student_id}><td>{student.student_name}</td><td>{student.course||"—"}</td><td>{student.semester||"—"}</td><td>{student.latest_model_estimate===null?"—":student.latest_model_estimate.toFixed(1)}</td><td><span className="badge">{student.support_level.replaceAll("_"," ")}</span></td><td>{student.support_factors}</td></tr>)}</tbody></table></div>:<p className="muted">No students are assigned to this teacher yet.</p>}</article>
+  </>;
+}
+
+function InstitutionIntelligencePage() {
+  const [data,setData]=useState(null);
+  useEffect(()=>api.get("/api/institution/intelligence").then(r=>setData(r.data)).catch(reportApiError),[]);
+  if(!data)return <div className="loading-page">Loading institution intelligence…</div>;
+  return <><div className="page-heading"><div><span>Aggregate institutional view</span><h1>{data.institution} · Intelligence</h1></div></div>
+    <StatCards items={[[Users,"Students",data.student_count],[History,"Saved assessments",data.assessment_count],[Activity,"Students with assessments",data.students_with_assessments],[Target,"Average model estimate",data.average_model_estimate===null?"—":`${data.average_model_estimate}%`]]}/>
+    <div className="chart-grid"><article className="panel"><h3>Department distribution</h3>{data.department_distribution.length?<div className="table-wrap"><table><thead><tr><th>Department</th><th>Student count</th></tr></thead><tbody>{data.department_distribution.map(item=><tr key={item.department}><td>{item.department}</td><td>{item.student_count}</td></tr>)}</tbody></table></div>:<p className="muted">No department group meets the privacy threshold of five students.</p>}</article>
+    <article className="panel"><h3>Semester distribution</h3>{data.semester_distribution.length?<div className="table-wrap"><table><thead><tr><th>Semester</th><th>Student count</th></tr></thead><tbody>{data.semester_distribution.map(item=><tr key={item.semester}><td>{item.semester}</td><td>{item.student_count}</td></tr>)}</tbody></table></div>:<p className="muted">No semester group meets the privacy threshold of five students.</p>}</article></div>
+    <article className="panel"><p className="muted">{data.notice}</p><p className="muted">Small-group suppression threshold: {data.small_group_suppression_threshold}</p></article>
+  </>;
+}
+
+function Protected({auth,admin=false,roles=[],children}) {
   if(!auth.user)return <Navigate to="/login" replace/>;
   if(admin&&auth.user.role!=="admin")return <Navigate to="/dashboard" replace/>;
+  if(roles.length>0&&!roles.includes(auth.user.role))return <Navigate to="/dashboard" replace/>;
   return <AppShell auth={auth} admin={admin}>{children}</AppShell>;
 }
 
@@ -746,6 +773,7 @@ export default function App() {
     <Route path="/register" element={auth.user?<Navigate to="/dashboard" replace/>:<AuthPage mode="register" auth={auth}/>}/>
     <Route path="/admin/login" element={auth.user?(<Navigate to={auth.user.role==="admin"?"/admin":"/dashboard"} replace/>):<AuthPage mode="admin" auth={auth}/>}/>
     <Route path="/dashboard" element={<Protected auth={auth}><Dashboard/></Protected>}/>
+    <Route path="/growth-lab" element={<Protected auth={auth} roles={["student"]}><AcademicGrowthHub/></Protected>}/>
     <Route path="/predict" element={<Protected auth={auth}><PredictionForm/></Protected>}/>
     <Route path="/simulate" element={<Protected auth={auth}><WhatIfSimulator/></Protected>}/>
     <Route path="/risk" element={<Protected auth={auth} roles={["student"]}><AcademicRiskPage/></Protected>}/>
@@ -756,7 +784,9 @@ export default function App() {
     <Route path="/notifications" element={<Protected auth={auth} roles={["student"]}><StudentNotificationsPage/></Protected>}/>
     <Route path="/teacher" element={<Protected auth={auth} roles={["teacher"]}><TeacherPortalPage/></Protected>}/>
     <Route path="/teacher/students" element={<Protected auth={auth} roles={["teacher"]}><TeacherPortalPage/></Protected>}/>
+    <Route path="/teacher/intelligence" element={<Protected auth={auth} roles={["teacher"]}><TeacherIntelligencePage/></Protected>}/>
     <Route path="/institution" element={<Protected auth={auth} roles={["institution_admin"]}><InstitutionPortalPage/></Protected>}/>
+    <Route path="/institution/intelligence" element={<Protected auth={auth} roles={["institution_admin"]}><InstitutionIntelligencePage/></Protected>}/>
     <Route path="/admin/teaching" element={<Protected auth={auth} admin><AdminTeachingPage/></Protected>}/>
     <Route path="/predictions" element={<Protected auth={auth}><PredictionHistory/></Protected>}/>
     <Route path="/predictions/:id" element={<Protected auth={auth}><PredictionDetail/></Protected>}/>
