@@ -108,6 +108,7 @@ class StudyPlanRequest(BaseModel):
 
 class AssistantQuestion(BaseModel):
     question: str = Field(min_length=3, max_length=1200)
+    allow_external_processing: bool = False
 
 
 class TeacherCreate(BaseModel):
