@@ -13,7 +13,7 @@ import pandas as pd
 from sklearn.ensemble import GradientBoostingRegressor, HistGradientBoostingRegressor, RandomForestRegressor
 from sklearn.linear_model import Ridge
 from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
-from sklearn.model_selection import KFold, cross_val_score, train_test_split
+from sklearn.model_selection import GroupKFold, GroupShuffleSplit, KFold, cross_val_score, train_test_split
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler
 
@@ -22,13 +22,14 @@ from app.ml.predictor import FEATURES
 BOOLEAN_FEATURES = {"extracurricular", "internet_access", "family_support"}
 
 
-def _prepare_dataset(frame: pd.DataFrame, target_column: str) -> tuple[pd.DataFrame, pd.Series, dict]:
-    missing = [name for name in [*FEATURES, target_column] if name not in frame.columns]
+def _prepare_dataset(frame: pd.DataFrame, target_column: str, group_column: str | None = None) -> tuple[pd.DataFrame, pd.Series, dict, pd.Series | None]:
+    required = [*FEATURES, target_column] + ([group_column] if group_column else [])
+    missing = [name for name in required if name not in frame.columns]
     if missing:
         raise ValueError(f"Dataset is missing required columns: {', '.join(missing)}")
 
     source_rows = len(frame)
-    data = frame[[*FEATURES, target_column]].copy()
+    data = frame[required].copy()
     duplicates = int(data.duplicated().sum())
     data = data.drop_duplicates()
 
@@ -66,6 +67,7 @@ def _prepare_dataset(frame: pd.DataFrame, target_column: str) -> tuple[pd.DataFr
         if not data[name].between(minimum, maximum).all():
             raise ValueError(f"{name} contains values outside the supported range {minimum}–{maximum}.")
 
+    groups = data[group_column].copy() if group_column else None
     quality = {
         "source_rows": source_rows,
         "valid_rows": int(len(data)),
@@ -73,20 +75,36 @@ def _prepare_dataset(frame: pd.DataFrame, target_column: str) -> tuple[pd.DataFr
         "incomplete_rows_removed": missing_rows,
         "target_column": target_column,
         "feature_columns": FEATURES,
+        "group_column_used": group_column,
+        "unique_groups": int(groups.nunique()) if groups is not None else None,
     }
-    return data[FEATURES].astype(float), data[target_column].astype(float), quality
+    return data[FEATURES].astype(float), data[target_column].astype(float), quality, groups
 
 
 def train_candidate_from_frame(
     frame: pd.DataFrame,
     target_column: str = "score",
     source_fingerprint: str = "in-memory-dataset",
+    group_column: str | None = None,
 ) -> tuple[dict, dict]:
-    X, y, quality = _prepare_dataset(frame, target_column)
-    X_train, X_test, y_train, y_test = train_test_split(
-        X, y, test_size=0.2, random_state=42
-    )
-    folds = KFold(n_splits=5, shuffle=True, random_state=42)
+    X, y, quality, groups = _prepare_dataset(frame, target_column, group_column)
+    if groups is not None:
+        if groups.nunique() < 5:
+            raise ValueError("At least five unique groups are required for group-aware cross-validation.")
+        splitter = GroupShuffleSplit(n_splits=1, test_size=0.2, random_state=42)
+        train_indices, test_indices = next(splitter.split(X, y, groups))
+        X_train, X_test = X.iloc[train_indices], X.iloc[test_indices]
+        y_train, y_test = y.iloc[train_indices], y.iloc[test_indices]
+        groups_train = groups.iloc[train_indices]
+        folds = GroupKFold(n_splits=5)
+        split_strategy = "GroupShuffleSplit + GroupKFold; groups isolated across train/test and folds"
+    else:
+        X_train, X_test, y_train, y_test = train_test_split(
+            X, y, test_size=0.2, random_state=42
+        )
+        groups_train = None
+        folds = KFold(n_splits=5, shuffle=True, random_state=42)
+        split_strategy = "Random 80/20 holdout + shuffled 5-fold CV"
     candidates = {
         "ridge": Pipeline([("scale", StandardScaler()), ("model", Ridge(alpha=1.0))]),
         "random_forest": RandomForestRegressor(
@@ -104,7 +122,7 @@ def train_candidate_from_frame(
     fitted = {}
     for name, estimator in candidates.items():
         scores = cross_val_score(
-            estimator, X_train, y_train, cv=folds,
+            estimator, X_train, y_train, cv=folds, groups=groups_train,
             scoring="neg_mean_absolute_error", n_jobs=1,
         )
         fitted[name] = estimator
@@ -142,7 +160,7 @@ def train_candidate_from_frame(
         "selected_model": selected_name,
         "dataset_fingerprint": source_fingerprint,
         "quality": quality,
-        "split": {"train_rows": int(len(X_train)), "test_rows": int(len(X_test)), "test_fraction": 0.2},
+        "split": {"train_rows": int(len(X_train)), "test_rows": int(len(X_test)), "test_fraction": 0.2, "strategy": split_strategy},
         "selection_method": "Lowest mean 5-fold cross-validation MAE on training split",
         "held_out_test_metrics": metrics,
         "candidate_comparison": comparison,
@@ -170,7 +188,8 @@ def main() -> None:
     fingerprint = hashlib.sha256(raw_bytes).hexdigest()
     frame = pd.read_csv(path)
     target = os.getenv("EDUPREDICT_TARGET_COLUMN", "score")
-    artifact, report = train_candidate_from_frame(frame, target, fingerprint)
+    group_column = os.getenv("EDUPREDICT_GROUP_COLUMN") or None
+    artifact, report = train_candidate_from_frame(frame, target, fingerprint, group_column)
 
     artifact_dir = Path(os.getenv(
         "EDUPREDICT_CANDIDATE_DIR",
