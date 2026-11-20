@@ -12,6 +12,7 @@ on:
     paths:
       - "backend/**"
       - "tests/**"
+      - "frontend/**"
       - ".github/workflows/backend-tests.yml"
 
 jobs:
