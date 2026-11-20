@@ -82,13 +82,61 @@ def train(force: bool = False):
     return artifact
 
 
-def predict(data: dict) -> tuple[float, dict]:
-    artifact = train()
-    row = pd.DataFrame([{
+def _feature_frame(data: dict) -> pd.DataFrame:
+    """Build the exact feature row expected by the persisted production pipeline."""
+    return pd.DataFrame([{
         key: (1 if data[key] else 0) if key in {
             "extracurricular", "internet_access", "family_support"
         } else data[key]
         for key in FEATURES
     }])
+
+
+def predict(data: dict) -> tuple[float, dict]:
+    artifact = train()
+    row = _feature_frame(data)
     score = float(artifact["pipeline"].predict(row)[0])
     return round(max(0.0, min(100.0, score)), 1), artifact
+
+
+def explain_prediction(data: dict) -> dict:
+    """
+    Explain the deployed Ridge model with exact additive coefficient
+    contributions relative to the training feature means.
+
+    This is a model-specific linear decomposition, not SHAP and not a
+    causal explanation. It deliberately uses the same persisted artifact
+    as predict(), so explanations stay compatible with deployed predictions.
+    """
+    artifact = train()
+    pipeline = artifact["pipeline"]
+    scaler = pipeline.named_steps["scaler"]
+    estimator = pipeline.named_steps["model"]
+    row = _feature_frame(data)
+    scaled_values = scaler.transform(row)[0]
+    coefficients = np.asarray(estimator.coef_, dtype=float).reshape(-1)
+    contributions = []
+
+    for index, feature in enumerate(FEATURES):
+        value = data[feature]
+        contribution = float(scaled_values[index] * coefficients[index])
+        contributions.append({
+            "feature": feature,
+            "value": value,
+            "contribution": round(contribution, 4),
+            "direction": "positive" if contribution > 0 else "negative" if contribution < 0 else "neutral",
+        })
+
+    contributions.sort(key=lambda item: abs(item["contribution"]), reverse=True)
+    baseline = float(np.asarray(estimator.intercept_).reshape(-1)[0])
+    raw_score = baseline + sum(item["contribution"] for item in contributions)
+    return {
+        "version": artifact["version"],
+        "dataset": artifact["dataset"],
+        "baseline_score": round(baseline, 4),
+        "raw_model_output": round(raw_score, 4),
+        "predicted_score": round(max(0.0, min(100.0, raw_score)), 1),
+        "contributions": contributions,
+        "method": "Ridge coefficient contributions relative to training feature means",
+        "is_causal": False,
+    }
