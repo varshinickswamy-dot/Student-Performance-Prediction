@@ -61,6 +61,7 @@ New student endpoints include:
 - `DELETE /api/student/activities/{activity_id}`
 - `GET /api/analytics/heatmap`
 - `GET /api/analytics/semester-comparison`
+- `GET /api/admin/model-monitoring` (system administrator only; exploratory input-distribution diagnostic)
 - `POST /api/assistant/chat`
 
 Teacher and institution workflows:
