@@ -16,7 +16,7 @@ from app.database import Base, engine, SessionLocal
 from app.models import User
 from app.core.security import hash_password
 from app.ml.predictor import synthetic_training_frame
-from app.ml.train_candidate import train_candidate_from_frame
+from app.ml.train_candidate import _prepare_dataset, train_candidate_from_frame
 import app.api as api_module
 
 
@@ -485,6 +485,53 @@ def test_candidate_training_supports_grouped_student_records():
     assert report["quality"]["unique_groups"] == 100
     assert "GroupShuffleSplit" in report["split"]["strategy"]
     assert artifact["training_rows"] + artifact["test_rows"] == 300
+    assert report["split"]["groups_disjoint"] is True
+    assert report["split"]["group_count_train"] >= 5
+    assert report["split"]["group_count_test"] >= 1
+    assert len(report["candidate_comparison"]) == 4
+    assert all(item["cross_validation_fold_count"] == 5 for item in report["candidate_comparison"])
+    assert report["held_out_test_metrics"]["mae"] >= 0
+    assert report["mean_baseline_test_metrics"]["mae"] >= 0
+    assert "mae_improvement_over_mean_baseline_percent" in report
+    assert report["quality"]["target_summary"]["minimum"] >= 0
+    assert report["quality"]["target_summary"]["maximum"] <= 100
+    assert report["quality"]["correlation_audit"]["interpretation"]
+    assert artifact["feature_schema_version"] == "1.0"
+    assert artifact["scikit_learn_version"]
+
+
+def test_candidate_dataset_audit_counts_duplicates_and_missing_rows():
+    frame = synthetic_training_frame(rows=180)
+    frame = pd.concat(
+        [frame, frame.iloc[[0]], frame.iloc[[1]].assign(study_hours=np.nan)],
+        ignore_index=True,
+    )
+    _, _, quality, _ = _prepare_dataset(frame, target_column="score")
+    assert quality["source_rows"] == 182
+    assert quality["duplicate_rows_removed"] == 1
+    assert quality["incomplete_rows_removed"] == 1
+    assert quality["valid_rows"] == 180
+    assert quality["missing_values_by_column_before_cleaning"]["study_hours"] == 1
+    assert len(quality["feature_summary"]) == 10
+
+
+def test_candidate_dataset_rejects_invalid_boolean_and_target_feature_overlap():
+    frame = synthetic_training_frame(rows=180)
+    invalid_boolean = frame.copy()
+    invalid_boolean.loc[0, "internet_access"] = "sometimes"
+    with pytest.raises(ValueError, match="unsupported values"):
+        train_candidate_from_frame(invalid_boolean, source_fingerprint="invalid-boolean")
+
+    with pytest.raises(ValueError, match="target column cannot also"):
+        train_candidate_from_frame(frame, target_column="study_hours")
+
+
+def test_candidate_group_column_must_not_be_a_model_feature():
+    frame = synthetic_training_frame(rows=180)
+    with pytest.raises(ValueError, match="grouping column must be separate"):
+        train_candidate_from_frame(
+            frame, target_column="score", group_column="study_hours"
+        )
 
 
 def test_extended_student_growth_lab_endpoints():
