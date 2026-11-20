@@ -459,3 +459,16 @@ def test_external_assistant_provider_requires_explicit_per_request_consent(monke
     assert len(calls) == 1
     assert "student_name" not in calls[0]["messages"][1]["content"]
     assert "latest_prediction_id" not in calls[0]["messages"][1]["content"]
+
+
+
+def test_candidate_training_supports_grouped_student_records():
+    frame = synthetic_training_frame(rows=300)
+    frame["student_group"] = [f"student-{index // 3}" for index in range(300)]
+    artifact, report = train_candidate_from_frame(
+        frame, target_column="score", source_fingerprint="grouped-test-data",
+        group_column="student_group",
+    )
+    assert report["quality"]["unique_groups"] == 100
+    assert "GroupShuffleSplit" in report["split"]["strategy"]
+    assert artifact["training_rows"] + artifact["test_rows"] == 300
