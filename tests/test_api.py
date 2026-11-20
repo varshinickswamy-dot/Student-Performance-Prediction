@@ -392,3 +392,29 @@ def test_student_activity_tracking_is_validated_and_owner_scoped():
     assert client.delete(
         f"/api/student/activities/{study.json()['id']}", headers=other_headers
     ).status_code == 404
+
+
+
+def test_semester_analytics_are_scoped_to_authenticated_student():
+    registered = client.post("/api/auth/register", json={
+        "full_name": "Analytics Student", "email": "semester-analytics@example.com",
+        "password": "StrongPassword123", "confirm_password": "StrongPassword123",
+    })
+    headers = {"Authorization": f"Bearer {registered.json()['access_token']}"}
+    base = {
+        "subject": "Physics", "semester": "1", "study_hours": 4,
+        "previous_marks": 70, "attendance": 85, "assignment_scores": 75,
+        "class_participation": 70, "homework_completion": 80,
+        "sleep_hours": 7, "extracurricular": False,
+        "internet_access": True, "family_support": True,
+    }
+    assert client.post("/api/predictions/predict", headers=headers, json=base).status_code == 200
+    next_semester = {**base, "semester": "2", "subject": "Chemistry"}
+    assert client.post("/api/predictions/predict", headers=headers, json=next_semester).status_code == 200
+
+    heatmap = client.get("/api/analytics/heatmap", headers=headers)
+    assert heatmap.status_code == 200
+    assert len(heatmap.json()) == 2
+    comparison = client.get("/api/analytics/semester-comparison", headers=headers)
+    assert comparison.status_code == 200
+    assert {item["semester"] for item in comparison.json()} == {"1", "2"}
