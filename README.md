@@ -8,6 +8,9 @@ EduPredict is a full-stack academic analytics application for student performanc
 - Registration, login, protected student routes, and JWT sessions
 - Demonstration Ridge regression model with persisted Joblib artifact
 - Prediction history, delete protection, analytics, and transparent recommendations
+- Authenticated model explanations using additive Ridge coefficient contributions
+- What-if scenario comparisons using the same deployed prediction pipeline without saving simulated records
+- Separate liveness and dependency-readiness endpoints for deployment monitoring
 - Student profile management
 - Role-based administrator dashboard and audit logs
 - Vercel-compatible frontend and independently deployable FastAPI backend
@@ -66,7 +69,9 @@ The initial demonstration credentials are configurable with `ADMIN_USERNAME` and
 
 The demo Ridge regression pipeline uses study hours, previous marks, attendance, assignment scores, class participation, homework completion, sleep hours, extracurricular activity, internet access, and family support. The synthetic data and target are generated deterministically with random seed 42. The model uses an 80/20 train/test split.
 
-The actual evaluation metrics are exposed by `GET /api/admin/models`. No fixed or promised accuracy is used.
+The actual evaluation metrics are exposed by `GET /api/admin/models`. The current artifact is explicitly identified as a synthetic demonstration model; its metrics are not evidence of real-world student performance. No fixed or promised accuracy is used.
+
+The API also exposes `GET /api/predictions/{prediction_id}/explanation` for authenticated, owner-scoped additive Ridge coefficient contributions and `POST /api/predictions/simulate` for non-persisted what-if comparisons. These use the same deployed artifact as ordinary predictions. See [ML methodology](docs/ML_METHODOLOGY.md) for interpretation and limitations.
 
 ## Testing
 
