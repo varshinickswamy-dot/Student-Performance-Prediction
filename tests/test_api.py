@@ -12,6 +12,8 @@ from app.main import app
 from app.database import Base, engine, SessionLocal
 from app.models import User
 from app.core.security import hash_password
+from app.ml.predictor import synthetic_training_frame
+from app.ml.train_candidate import train_candidate_from_frame
 
 
 Base.metadata.drop_all(bind=engine)
@@ -318,3 +320,28 @@ def test_teacher_portal_assignment_isolation_and_institution_analytics():
     assert analytics.status_code == 200
     assert analytics.json()["student_count"] >= 1
     assert client.get("/api/teacher/dashboard", headers=institution_headers).status_code == 403
+
+
+
+def test_candidate_training_compares_models_without_replacing_live_artifact():
+    frame = synthetic_training_frame(rows=300)
+    artifact, report = train_candidate_from_frame(
+        frame, target_column="score", source_fingerprint="unit-test-dataset",
+    )
+    assert artifact["version"].startswith("candidate-")
+    assert artifact["training_rows"] + artifact["test_rows"] == 300
+    assert report["selected_model"] in {
+        "ridge", "random_forest", "gradient_boosting", "hist_gradient_boosting",
+    }
+    assert len(report["candidate_comparison"]) == 4
+    assert report["held_out_test_metrics"]["mae"] >= 0
+    assert "live model" in " ".join(report["limitations"]).lower()
+
+
+def test_candidate_training_rejects_missing_features_and_small_datasets():
+    from app.ml.train_candidate import train_candidate_from_frame
+
+    with pytest.raises(ValueError, match="missing required columns"):
+        train_candidate_from_frame(pd.DataFrame({"score": [50] * 120}))
+    with pytest.raises(ValueError, match="At least 100"):
+        train_candidate_from_frame(synthetic_training_frame(rows=50))
