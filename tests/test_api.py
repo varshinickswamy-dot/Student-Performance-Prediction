@@ -1,4 +1,6 @@
 import os
+import pandas as pd
+import pytest
 
 os.environ["DATABASE_URL"] = "sqlite:///./test_student_performance.db"
 os.environ["JWT_SECRET_KEY"] = "test-secret-key"
