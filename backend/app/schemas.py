@@ -68,6 +68,11 @@ class PredictionInput(BaseModel):
     family_support: bool = True
 
 
+class PredictionSimulationInput(BaseModel):
+    baseline: PredictionInput
+    scenario: PredictionInput
+
+
 class PredictionResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     id: int
