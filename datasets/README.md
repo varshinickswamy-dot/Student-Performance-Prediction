@@ -37,4 +37,8 @@ $env:EDUPREDICT_GROUP_COLUMN="student_group"
 python -m app.ml.train_candidate
 ```
 
+Before model selection, the candidate trainer reports missingness by column, duplicates, incomplete rows, feature and target summaries, constant columns, unusually correlated features, and near-perfect feature/target correlations for human review. Unknown boolean strings are rejected rather than silently dropped. These checks cannot establish provenance, fairness, or absence of leakage by themselves; a data owner must review the report and source documentation.
+
+The evaluation report includes a mean-prediction baseline and held-out regression metrics. For repeated student records, group isolation is mandatory: use at least seven distinct anonymized groups so the 20% group holdout can leave five groups for GroupKFold. The report confirms that train and test groups are disjoint without exposing the group identifiers.
+
 The output is a candidate artifact and evaluation report under `backend/app/ml/model_artifacts/candidates/`. It does not replace the live deployed model. Do not commit private data, private reports, or model artifacts derived from confidential records.
