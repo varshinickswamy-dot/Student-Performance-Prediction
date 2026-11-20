@@ -458,3 +458,4 @@ def test_external_assistant_provider_requires_explicit_per_request_consent(monke
     assert consented.json()["provider"] == "configured_llm"
     assert len(calls) == 1
     assert "student_name" not in calls[0]["messages"][1]["content"]
+    assert "latest_prediction_id" not in calls[0]["messages"][1]["content"]
