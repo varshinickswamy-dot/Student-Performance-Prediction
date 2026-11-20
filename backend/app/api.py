@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 import jwt
 
 from app.database import get_db
-from app.models import AuditLog, InterventionNote, Prediction, StudyGoal, TeacherAssignment, User
+from app.models import AcademicActivity, AuditLog, InterventionNote, Prediction, StudyGoal, TeacherAssignment, User
 from app.schemas import (
     LoginRequest, PredictionInput, PredictionResponse, ProfileUpdate,
     RegisterRequest, PredictionSimulationInput, TokenResponse, UserResponse,
@@ -901,3 +901,91 @@ def create_institution_admin(
     db.add(AuditLog(actor_id=admin.id, action="institution_admin_created", details=f"Account ID {account.id}"))
     db.commit()
     return public_user(account)
+
+
+def _activity_payload(activity: AcademicActivity) -> dict:
+    return {
+        "id": activity.id, "activity_type": activity.activity_type,
+        "subject": activity.subject, "value": activity.value,
+        "occurred_on": activity.occurred_on.isoformat(),
+        "notes": activity.notes, "created_at": activity.created_at.isoformat(),
+    }
+
+
+@router.post("/api/student/activities", status_code=201)
+def create_academic_activity(
+    payload: AcademicActivityCreate,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    if payload.activity_type == "study_session" and payload.value > 16:
+        raise HTTPException(status_code=422, detail="A study session cannot exceed 16 hours.")
+    if payload.activity_type == "attendance" and payload.value not in (0, 1):
+        raise HTTPException(status_code=422, detail="Attendance value must be 1 for present or 0 for absent.")
+    activity = AcademicActivity(
+        user_id=user.id, activity_type=payload.activity_type,
+        subject=payload.subject.strip(), value=payload.value,
+        occurred_on=payload.occurred_on, notes=payload.notes,
+    )
+    db.add(activity)
+    db.commit()
+    db.refresh(activity)
+    return _activity_payload(activity)
+
+
+@router.get("/api/student/activities")
+def list_academic_activities(
+    limit: int = Query(50, ge=1, le=100),
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    rows = db.query(AcademicActivity).filter(
+        AcademicActivity.user_id == user.id
+    ).order_by(AcademicActivity.occurred_on.desc(), AcademicActivity.id.desc()).limit(limit).all()
+    return [_activity_payload(row) for row in rows]
+
+
+@router.delete("/api/student/activities/{activity_id}", status_code=204)
+def delete_academic_activity(
+    activity_id: int,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    activity = db.get(AcademicActivity, activity_id)
+    if not activity or activity.user_id != user.id:
+        raise HTTPException(status_code=404, detail="Academic activity not found")
+    db.delete(activity)
+    db.commit()
+    return None
+
+
+@router.get("/api/student/activities/summary")
+def academic_activity_summary(
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    today = datetime.now(timezone.utc).date()
+    rows = db.query(AcademicActivity).filter(
+        AcademicActivity.user_id == user.id,
+        AcademicActivity.occurred_on >= today.fromordinal(max(1, today.toordinal() - 29)),
+    ).all()
+    study_week = sum(
+        row.value for row in rows
+        if row.activity_type == "study_session"
+        and row.occurred_on >= today.fromordinal(max(1, today.toordinal() - 6))
+    )
+    attendance_rows = [row for row in rows if row.activity_type == "attendance"]
+    assignment_rows = [row for row in rows if row.activity_type == "assignment"]
+    return {
+        "period_days": 30,
+        "study_hours_last_7_days": round(study_week, 1),
+        "attendance_classes_recorded": len(attendance_rows),
+        "recorded_attendance_percentage": round(
+            sum(row.value for row in attendance_rows) / len(attendance_rows) * 100, 1
+        ) if attendance_rows else None,
+        "assignment_entries": len(assignment_rows),
+        "average_assignment_score": round(
+            sum(row.value for row in assignment_rows) / len(assignment_rows), 1
+        ) if assignment_rows else None,
+        "disclaimer": "These summaries reflect only activities the student has manually recorded; they are not an official institutional attendance or gradebook record.",
+    }
