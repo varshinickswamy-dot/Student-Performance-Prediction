@@ -765,14 +765,13 @@ def academic_assistant(
     api_key = os.getenv("AI_API_KEY")
     model = os.getenv("AI_MODEL")
     base_url = os.getenv("AI_API_BASE_URL", "https://api.openai.com/v1").rstrip("/")
-    if not api_key or not model:
+    if not api_key or not model or not payload.allow_external_processing:
         return {"answer": fallback, "provider": "built_in_contextual_fallback", "model": None}
 
     if os.getenv("ENVIRONMENT", "development").lower() in {"production", "prod"} and not base_url.startswith("https://"):
         raise HTTPException(status_code=503, detail="The configured AI provider must use HTTPS in production.")
 
     context = {
-        "student_name": user.full_name,
         "latest_assessment": None if latest is None else {
             "subject": latest.subject, "semester": latest.semester,
             "model_estimate": latest.predicted_score,
