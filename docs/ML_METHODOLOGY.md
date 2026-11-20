@@ -59,7 +59,7 @@ $env:EDUPREDICT_TARGET_COLUMN="score"
 python -m app.ml.train_candidate
 ```
 
-The CSV must contain the existing feature contract plus the configured numeric target column (default `score`). Boolean inputs accept true/false, yes/no, or 1/0. Numeric feature ranges are validated. The trainer removes duplicate and incomplete rows, requires at least 100 complete unique records, and rejects targets outside 0–100.
+The CSV must contain the existing feature contract plus the configured numeric target column (default `score`). Boolean inputs accept true/false, yes/no, or 1/0. Numeric feature ranges are validated. The trainer removes duplicate and incomplete rows, requires at least 100 complete unique records, and rejects targets outside 0–100. For repeated or longitudinal records, set `EDUPREDICT_GROUP_COLUMN` to a stable student or institution grouping column; the group column is used only for splitting and is never a model feature. Group-aware holdout and GroupKFold prevent the same group from appearing across train/test or validation folds.
 
 The trainer holds out 20% of the data before model selection, compares Ridge, Random Forest, Gradient Boosting and HistGradientBoosting using five-fold cross-validation on the training split, selects by mean cross-validation MAE, then evaluates the selected candidate once on the untouched test split. Preprocessing is inside the estimator pipeline. The report records data-quality counts, dataset fingerprint, model comparison and held-out metrics.
 
