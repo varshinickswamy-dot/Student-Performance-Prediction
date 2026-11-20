@@ -108,3 +108,8 @@ Important limitations: career readiness is a small illustrative skill-map covera
 The offline candidate trainer now audits dataset missingness, duplicates, feature/target distributions, constant features, and unusually high correlations for human leakage review. It rejects unsupported boolean values, supports group-isolated student-level holdout and cross-validation, compares candidate models against a mean baseline, and records expanded held-out regression metrics and residual diagnostics.
 
 This remains an offline candidate workflow. It does not retrain or replace the deployed synthetic demonstration model. No real authorized student dataset is currently present in the repository; a dataset owner must provide one with documented provenance and permission before a real-world model can be evaluated.
+
+
+## Synthetic student dataset candidate benchmark
+
+An anonymized generated CSV can be evaluated offline with `python -m app.ml.train_student_candidate` after setting `EDUPREDICT_STUDENT_DATASET_PATH`. This candidate predicts `final_exam_score` from pre-final academic inputs, excludes IDs/demographics/derived outcomes, and uses student-group-isolated evaluation. It is deliberately separate from the deployed Ridge model because its feature contract differs. See [Synthetic Dataset Benchmark](docs/SYNTHETIC_DATASET_BENCHMARK.md). No Render environment change or production model promotion is required.
