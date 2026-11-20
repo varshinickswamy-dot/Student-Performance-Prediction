@@ -3,7 +3,7 @@ import { Link, Navigate, Route, Routes, useNavigate, useParams } from "react-rou
 import {
   Activity, BarChart3, BookOpen, ChevronRight, GraduationCap, History,
   LayoutDashboard, LogOut, Menu, Moon, ShieldCheck, Sun, Target,
-  TrendingUp, UserRound, Users, X, BrainCircuit, Settings, ClipboardList,
+  TrendingUp, UserRound, Users, X, BrainCircuit, Settings, ClipboardList,\n  CalendarDays, ShieldAlert, Bell, Bot, MessageSquare, CheckCircle2, Plus,
 } from "lucide-react";
 import {
   Area, AreaChart, Bar, BarChart, CartesianGrid, Legend,
@@ -171,7 +171,7 @@ function AuthPage({ mode, auth }) {
         auth.login(res.data.access_token,res.data.user); navigate("/dashboard");
       } else {
         const res = await api.post("/api/auth/login",{email:form.email,password:form.password});
-        auth.login(res.data.access_token,res.data.user,form.remember); navigate(res.data.user.role==="admin"?"/admin":"/dashboard");
+        auth.login(res.data.access_token,res.data.user,form.remember); navigate(res.data.user.role==="admin"?"/admin":res.data.user.role==="teacher"?"/teacher":res.data.user.role==="institution_admin"?"/institution":"/dashboard");
       }
     } catch(err) { setError(getApiErrorMessage(err)); }
     finally { setLoading(false); }
@@ -206,10 +206,15 @@ function AuthPage({ mode, auth }) {
 function AppShell({ auth, admin=false, children }) {
   const navigate = useNavigate(); const [open,setOpen]=useState(false);
   const logout=()=>{auth.logout();navigate("/");};
+  const role=auth.user?.role;
   const items = admin ? [
-    ["/admin",LayoutDashboard,"Overview"],["/admin/users",Users,"Students"],["/admin/predictions",History,"Predictions"],["/admin/models",BrainCircuit,"ML Models"],["/admin/analytics",BarChart3,"Analytics"],["/admin/audit",ClipboardList,"Audit Log"],["/admin/settings",Settings,"Settings"]
+    ["/admin",LayoutDashboard,"Overview"],["/admin/users",Users,"Students"],["/admin/teaching",GraduationCap,"Teaching Staff"],["/admin/predictions",History,"Predictions"],["/admin/models",BrainCircuit,"ML Models"],["/admin/analytics",BarChart3,"Analytics"],["/admin/audit",ClipboardList,"Audit Log"],["/admin/settings",Settings,"Settings"]
+  ] : role==="teacher" ? [
+    ["/teacher",LayoutDashboard,"Teacher Overview"],["/teacher/students",Users,"Assigned Students"],["/profile",UserRound,"My Profile"]
+  ] : role==="institution_admin" ? [
+    ["/institution",BarChart3,"Institution Analytics"],["/profile",UserRound,"My Profile"]
   ] : [
-    ["/dashboard",LayoutDashboard,"Overview"],["/predict",Target,"Predict Performance"],["/simulate",Activity,"What-if Simulator"],["/predictions",History,"My Predictions"],["/analytics",BarChart3,"Academic Analytics"],["/recommendations",Activity,"Recommendations"],["/profile",UserRound,"My Profile"]
+    ["/dashboard",LayoutDashboard,"Overview"],["/predict",Target,"Predict Performance"],["/simulate",Activity,"What-if Simulator"],["/risk",ShieldAlert,"Risk Assessment"],["/study-plan",CalendarDays,"Study Planner"],["/goals",CheckCircle2,"Study Goals"],["/assistant",Bot,"AI Assistant"],["/notifications",Bell,"Notifications"],["/predictions",History,"My Predictions"],["/analytics",BarChart3,"Academic Analytics"],["/recommendations",Activity,"Recommendations"],["/profile",UserRound,"My Profile"]
   ];
   return (
     <div className="app-shell">
@@ -525,6 +530,81 @@ function Recommendations() {
   return <><div className="page-heading"><div><span>Personal growth</span><h1>Learning recommendations</h1></div></div>{loading?<div className="loading-page">Loading...</div>:items.length===0?<div className="empty-state"><Target/><h2>No recommendations yet</h2><p>Your first prediction will generate a personalized improvement plan.</p><Link className="button primary" to="/predict">Create prediction</Link></div>:<div className="recommendation-list panel">{items.map((r,i)=><div className="recommendation" key={i}><span className={`priority ${r.priority.toLowerCase()}`}>{r.priority}</span><div><b>{r.area}</b><p>{r.action}</p><small>{r.benefit}</small></div><span className="status">{r.status}</span></div>)}</div>}</>;
 }
 
+function AcademicRiskPage() {
+  const [data,setData]=useState(null);
+  useEffect(()=>api.get("/api/student/risk-assessment").then(r=>setData(r.data)).catch(reportApiError),[]);
+  if(!data)return <div className="loading-page">Assessing your saved academic inputs...</div>;
+  if(data.status!=="assessed")return <div className="empty-state"><ShieldAlert/><h2>More information needed</h2><p>{data.actions?.[0]}</p><Link className="button primary" to="/predict">Create assessment</Link></div>;
+  return <><div className="page-heading"><div><span>Student support insights</span><h1>Academic risk assessment</h1></div><span className={`badge ${data.risk_level==="high"?"danger":data.risk_level==="moderate"?"warning":"success"}`}>{data.risk_level} support priority</span></div>
+    <article className="panel"><div className="risk-summary"><div><span>Support points</span><strong>{data.risk_points}</strong><small>Rule-based indicators, not probability</small></div><div><span>Latest model estimate</span><strong>{data.latest_model_estimate?.toFixed(1)}/100</strong><small>{data.subject} · Semester {data.semester}</small></div><div><span>Recent estimate change</span><strong>{data.recent_estimate_change===null?"—":`${data.recent_estimate_change>0?"+":""}${data.recent_estimate_change}`}</strong><small>Compared with previous saved estimate</small></div></div></article>
+    <article className="panel"><h3>Areas that may need support</h3>{data.factors.length?<div className="risk-factor-list">{data.factors.map(item=><div className="risk-factor" key={item.factor}><span className={`badge ${item.severity==="high"?"danger":"warning"}`}>{item.severity}</span><div><strong>{item.factor.replaceAll("_"," ")}</strong><p>{item.observation}</p><small>{item.suggested_action}</small></div></div>)}</div>:<p className="muted">No configured support indicators were triggered by the latest saved inputs.</p>}</article>
+    <article className="panel"><h3>Suggested next steps</h3><ul className="action-list">{data.actions.map((item,i)=><li key={i}>{item}</li>)}</ul></article>
+    <p className="muted">{data.disclaimer}</p>
+  </>;
+}
+
+function StudyPlannerPage() {
+  const [hours,setHours]=useState(2),[subject,setSubject]=useState("");
+  const [plan,setPlan]=useState(null),[error,setError]=useState(""),[loading,setLoading]=useState(false);
+  const generate=async e=>{e.preventDefault();setLoading(true);setError("");try{const r=await api.post("/api/student/study-plan",{available_hours_per_day:Number(hours),focus_subject:subject||null});setPlan(r.data)}catch(err){setError(getApiErrorMessage(err))}finally{setLoading(false)}};
+  return <><div className="page-heading"><div><span>Personalized learning</span><h1>Weekly study planner</h1></div></div><article className="panel"><form className="form-grid" onSubmit={generate}><label>Focus subject<input value={subject} onChange={e=>setSubject(e.target.value)} placeholder="Use latest assessment subject if blank"/></label><label>Available study hours per day<input type="number" min="0.5" max="8" step="0.5" value={hours} onChange={e=>setHours(e.target.value)}/></label><button className="button primary" disabled={loading}>{loading?"Generating...":"Generate 7-day plan"}</button></form>{error&&<div className="alert">{error}</div>}</article>
+    {plan&&<><div className="planner-grid">{plan.days.map(day=><article className="panel planner-day" key={day.day}><div className="planner-day-head"><div><span>{day.date}</span><h3>{day.day}</h3></div><span className="badge">{day.estimated_hours} hrs</span></div><strong>{day.subject}</strong><ul>{day.activities.map((task,i)=><li key={i}>{task}</li>)}</ul></article>)}</div><p className="muted">{plan.disclaimer}</p></>}
+  </>;
+}
+
+function StudyGoalsPage() {
+  const [goals,setGoals]=useState([]),[form,setForm]=useState({title:"",subject:"",target_date:"",description:""}),[loading,setLoading]=useState(true),[error,setError]=useState("");
+  const load=()=>api.get("/api/student/goals").then(r=>setGoals(r.data)).catch(e=>setError(getApiErrorMessage(e))).finally(()=>setLoading(false));
+  useEffect(()=>{load()},[]);
+  const create=async e=>{e.preventDefault();setError("");try{await api.post("/api/student/goals",{...form,target_date:form.target_date?new Date(`${form.target_date}T00:00:00`).toISOString():null});setForm({title:"",subject:"",target_date:"",description:""});load()}catch(err){setError(getApiErrorMessage(err))}};
+  const update=async(g,status)=>{try{await api.patch(`/api/student/goals/${g.id}`,{status});load()}catch(err){setError(getApiErrorMessage(err))}};
+  const remove=async g=>{if(!window.confirm(`Delete the goal "${g.title}"?`))return;try{await api.delete(`/api/student/goals/${g.id}`);load()}catch(err){setError(getApiErrorMessage(err))}};
+  return <><div className="page-heading"><div><span>Personal accountability</span><h1>Study goals</h1></div></div><article className="panel"><h3>Create a study goal</h3>{error&&<div className="alert">{error}</div>}<form onSubmit={create} className="form-grid"><label>Goal title<input value={form.title} onChange={e=>setForm({...form,title:e.target.value})} minLength={3} required/></label><label>Subject<input value={form.subject} onChange={e=>setForm({...form,subject:e.target.value})}/></label><label>Target date<input type="date" value={form.target_date} onChange={e=>setForm({...form,target_date:e.target.value})}/></label><label>Description<input value={form.description} onChange={e=>setForm({...form,description:e.target.value})}/></label><button className="button primary">Add goal</button></form></article>
+    <article className="panel"><h3>Your goals</h3>{loading?<p>Loading goals...</p>:goals.length===0?<p className="muted">No goals yet. Create your first study goal above.</p>:<div className="goal-list">{goals.map(g=><div className="goal-item" key={g.id}><div><strong>{g.title}</strong><p>{g.subject||"General"} · {g.target_date||"No target date"}</p>{g.description&&<small>{g.description}</small>}</div><span className={`badge ${g.status==="completed"?"success":"warning"}`}>{g.status.replace("_"," ")}</span><div className="page-actions">{g.status!=="completed"&&<button className="button ghost" onClick={()=>update(g,"completed")}>Complete</button>}<button className="text-button danger" onClick={()=>remove(g)}>Delete</button></div></div>)}</div>}</article>
+  </>;
+}
+
+function AcademicAssistantPage() {
+  const [question,setQuestion]=useState("How can I improve my study routine?");
+  const [messages,setMessages]=useState([]),[loading,setLoading]=useState(false),[error,setError]=useState("");
+  const ask=async e=>{e.preventDefault();if(!question.trim())return;const q=question.trim();setMessages(items=>[...items,{role:"student",text:q}]);setQuestion("");setLoading(true);setError("");try{const r=await api.post("/api/assistant/chat",{question:q});setMessages(items=>[...items,{role:"assistant",text:r.data.answer,provider:r.data.provider}])}catch(err){setError(getApiErrorMessage(err))}finally{setLoading(false)}};
+  return <><div className="page-heading"><div><span>Academic guidance</span><h1>EduPredict assistant</h1></div></div><article className="panel assistant-panel"><div className="assistant-intro"><Bot/><div><strong>Academic support assistant</strong><p className="muted">Ask about your saved assessment, attendance, study routine or improvement areas.</p></div></div><div className="assistant-messages" aria-live="polite">{messages.length===0?<div className="empty-state"><MessageSquare/><p>Start by asking a question about your academic progress.</p></div>:messages.map((m,i)=><div className={`assistant-message ${m.role}`} key={i}><span>{m.role==="student"?"You":"EduPredict"}</span><p>{m.text}</p>{m.provider&&<small>{m.provider==="configured_llm"?"AI provider":"Built-in contextual assistant"}</small>}</div>)}{loading&&<p className="muted">Preparing an answer...</p>}</div>{error&&<div className="alert">{error}</div>}<form className="assistant-form" onSubmit={ask}><textarea value={question} onChange={e=>setQuestion(e.target.value)} maxLength={1200} rows={2} placeholder="Ask an academic question..."/><button className="button primary" disabled={loading||!question.trim()}>Send</button></form></article></>;
+}
+
+function StudentNotificationsPage() {
+  const [items,setItems]=useState([]),[loading,setLoading]=useState(true);
+  useEffect(()=>api.get("/api/student/notifications").then(r=>setItems(r.data)).catch(reportApiError).finally(()=>setLoading(false)),[]);
+  return <><div className="page-heading"><div><span>Updates</span><h1>Notifications</h1></div></div><article className="panel">{loading?<p>Loading notifications...</p>:items.length===0?<div className="empty-state"><Bell/><h3>You're all caught up</h3><p>New academic support reminders and goal due dates will appear here.</p></div>:<div className="notification-list">{items.map(item=><Link to={item.action} className="notification-item" key={item.id}><span className={`badge ${item.severity==="high"?"danger":item.severity==="moderate"?"warning":"success"}`}>{item.severity}</span><div><strong>{item.title}</strong><p>{item.message}</p></div><ChevronRight/></Link>)}</div>}</article></>;
+}
+
+function TeacherPortalPage() {
+  const [data,setData]=useState(null),[students,setStudents]=useState([]),[note,setNote]=useState({student_id:"",note:""}),[message,setMessage]=useState("");
+  const load=()=>Promise.all([api.get("/api/teacher/dashboard"),api.get("/api/teacher/students")]).then(([d,s])=>{setData(d.data);setStudents(s.data)}).catch(reportApiError);
+  useEffect(()=>{load()},[]);
+  const saveNote=async e=>{e.preventDefault();setMessage("");try{await api.post("/api/teacher/interventions",{student_id:Number(note.student_id),note:note.note});setNote({student_id:"",note:""});setMessage("Intervention note saved.");}catch(err){setMessage(getApiErrorMessage(err))}};
+  if(!data)return <div className="loading-page">Loading teacher workspace...</div>;
+  return <><div className="page-heading"><div><span>Teaching workspace · {data.institution}</span><h1>Teacher overview</h1></div></div><StatCards items={[[Users,"Assigned students",data.assigned_students],[ShieldAlert,"Students needing support",students.filter(s=>["high","moderate"].includes(s.support_level)).length]]}/><article className="panel"><h3>Assigned students</h3>{students.length?<div className="table-wrap"><table><thead><tr><th>Student</th><th>Course</th><th>Semester</th><th>Latest model estimate</th><th>Support level</th></tr></thead><tbody>{students.map(st=><tr key={st.id}><td>{st.full_name}</td><td>{st.course||"—"}</td><td>{st.semester||"—"}</td><td>{st.latest_model_estimate??"—"}</td><td>{st.support_level||"Not assessed"}</td></tr>)}</tbody></table></div>:<p className="muted">No students have been assigned to you yet. Ask the system administrator to assign students from the same institution.</p>}</article><article className="panel"><h3>Record an intervention note</h3><form onSubmit={saveNote} className="form-grid"><label>Assigned student<select value={note.student_id} onChange={e=>setNote({...note,student_id:e.target.value})} required><option value="">Select student</option>{students.map(st=><option key={st.id} value={st.id}>{st.full_name} · #{st.id}</option>)}</select></label><label>Private support note<textarea rows={3} value={note.note} onChange={e=>setNote({...note,note:e.target.value})} minLength={3} required/></label><button className="button primary" disabled={!students.length}>Save note</button></form>{message&&<p className="muted">{message}</p>}</article></>;
+}
+
+function InstitutionPortalPage() {
+  const [data,setData]=useState(null);
+  useEffect(()=>api.get("/api/institution/analytics").then(r=>setData(r.data)).catch(reportApiError),[]);
+  if(!data)return <div className="loading-page">Loading institution analytics...</div>;
+  return <><div className="page-heading"><div><span>Institution workspace</span><h1>{data.institution}</h1></div></div><StatCards items={[[Users,"Students",data.student_count],[History,"Saved assessments",data.prediction_count],[BarChart3,"Average model estimate",data.average_model_estimate===null?"—":`${data.average_model_estimate}%`]]}/><article className="panel"><p>{data.notice}</p></article></>;
+}
+
+function AdminTeachingPage() {
+  const [teacher,setTeacher]=useState({full_name:"",email:"",password:"",institution_name:"",department:""});
+  const [assignment,setAssignment]=useState({teacher_id:"",student_id:""});
+  const [institutionAdmin,setInstitutionAdmin]=useState({full_name:"",email:"",password:"",institution_name:"",department:""});
+  const [message,setMessage]=useState("");
+  const submitTeacher=async e=>{e.preventDefault();setMessage("");try{const r=await api.post("/api/admin/teachers",teacher);setMessage(`Teacher account created. ID: ${r.data.id}`);setTeacher({full_name:"",email:"",password:"",institution_name:"",department:""})}catch(err){setMessage(getApiErrorMessage(err))}};
+  const submitInstitution=async e=>{e.preventDefault();setMessage("");try{const r=await api.post("/api/admin/institution-admins",institutionAdmin);setMessage(`Institution administrator created. ID: ${r.data.id}`);setInstitutionAdmin({full_name:"",email:"",password:"",institution_name:"",department:""})}catch(err){setMessage(getApiErrorMessage(err))}};
+  const submitAssignment=async e=>{e.preventDefault();setMessage("");try{const r=await api.post(`/api/admin/teachers/${assignment.teacher_id}/assignments`,{student_id:Number(assignment.student_id)});setMessage(r.data.already_assigned?"Student was already assigned.":"Student assigned successfully.")}catch(err){setMessage(getApiErrorMessage(err))}};
+  const fields=(value,setter)=><div className="form-grid"><label>Full name<input value={value.full_name} onChange={e=>setter({...value,full_name:e.target.value})} required/></label><label>Email<input type="email" value={value.email} onChange={e=>setter({...value,email:e.target.value})} required/></label><label>Temporary password (12+ characters)<input type="password" minLength={12} value={value.password} onChange={e=>setter({...value,password:e.target.value})} required/></label><label>Institution<input value={value.institution_name} onChange={e=>setter({...value,institution_name:e.target.value})} required/></label><label>Department<input value={value.department} onChange={e=>setter({...value,department:e.target.value})}/></label></div>;
+  return <><div className="page-heading"><div><span>Staff and access</span><h1>Teaching & institution accounts</h1></div></div>{message&&<div className="alert">{message}</div>}<div className="chart-grid"><article className="panel"><h3>Create teacher account</h3><form onSubmit={submitTeacher}>{fields(teacher,setTeacher)}<button className="button primary">Create teacher</button></form></article><article className="panel"><h3>Create institution administrator</h3><form onSubmit={submitInstitution}>{fields(institutionAdmin,setInstitutionAdmin)}<button className="button primary">Create institution admin</button></form></article></div><article className="panel"><h3>Assign a student to a teacher</h3><p className="muted">Use the numeric account IDs. The backend verifies that both accounts belong to the same institution.</p><form onSubmit={submitAssignment} className="form-grid"><label>Teacher account ID<input type="number" min="1" value={assignment.teacher_id} onChange={e=>setAssignment({...assignment,teacher_id:e.target.value})} required/></label><label>Student account ID<input type="number" min="1" value={assignment.student_id} onChange={e=>setAssignment({...assignment,student_id:e.target.value})} required/></label><button className="button primary">Assign student</button></form></article></>;
+}
+
 function Profile() {
   const [profile,setProfile]=useState(null),[saved,setSaved]=useState(false);
   useEffect(()=>api.get("/api/student/profile").then(r=>setProfile(r.data)).catch(reportApiError) ,[]);
@@ -609,12 +689,21 @@ export default function App() {
     <ApiNotifications/>
     <Routes>
     <Route path="/" element={<Landing/>}/>
-    <Route path="/login" element={auth.user?(<Navigate to={auth.user.role==="admin"?"/admin":"/dashboard"} replace/>):<AuthPage mode="login" auth={auth}/>}/>
+    <Route path="/login" element={auth.user?(<Navigate to={auth.user.role==="admin"?"/admin":auth.user.role==="teacher"?"/teacher":auth.user.role==="institution_admin"?"/institution":"/dashboard"} replace/>):<AuthPage mode="login" auth={auth}/>}/>
     <Route path="/register" element={auth.user?<Navigate to="/dashboard" replace/>:<AuthPage mode="register" auth={auth}/>}/>
     <Route path="/admin/login" element={auth.user?(<Navigate to={auth.user.role==="admin"?"/admin":"/dashboard"} replace/>):<AuthPage mode="admin" auth={auth}/>}/>
     <Route path="/dashboard" element={<Protected auth={auth}><Dashboard/></Protected>}/>
     <Route path="/predict" element={<Protected auth={auth}><PredictionForm/></Protected>}/>
     <Route path="/simulate" element={<Protected auth={auth}><WhatIfSimulator/></Protected>}/>
+    <Route path="/risk" element={<Protected auth={auth} roles={["student"]}><AcademicRiskPage/></Protected>}/>
+    <Route path="/study-plan" element={<Protected auth={auth} roles={["student"]}><StudyPlannerPage/></Protected>}/>
+    <Route path="/goals" element={<Protected auth={auth} roles={["student"]}><StudyGoalsPage/></Protected>}/>
+    <Route path="/assistant" element={<Protected auth={auth} roles={["student"]}><AcademicAssistantPage/></Protected>}/>
+    <Route path="/notifications" element={<Protected auth={auth} roles={["student"]}><StudentNotificationsPage/></Protected>}/>
+    <Route path="/teacher" element={<Protected auth={auth} roles={["teacher"]}><TeacherPortalPage/></Protected>}/>
+    <Route path="/teacher/students" element={<Protected auth={auth} roles={["teacher"]}><TeacherPortalPage/></Protected>}/>
+    <Route path="/institution" element={<Protected auth={auth} roles={["institution_admin"]}><InstitutionPortalPage/></Protected>}/>
+    <Route path="/admin/teaching" element={<Protected auth={auth} admin><AdminTeachingPage/></Protected>}/>
     <Route path="/predictions" element={<Protected auth={auth}><PredictionHistory/></Protected>}/>
     <Route path="/predictions/:id" element={<Protected auth={auth}><PredictionDetail/></Protected>}/>
     <Route path="/analytics" element={<Protected auth={auth}><Analytics/></Protected>}/>
