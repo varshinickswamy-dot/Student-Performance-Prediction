@@ -8,13 +8,13 @@ from app.database import get_db
 from app.models import AuditLog, Prediction, User
 from app.schemas import (
     LoginRequest, PredictionInput, PredictionResponse, ProfileUpdate,
-    RegisterRequest, TokenResponse, UserResponse,
+    RegisterRequest, PredictionSimulationInput, TokenResponse, UserResponse,
 )
 from app.core.security import (
     JWT_ALGORITHM, JWT_SECRET_KEY, create_access_token,
     hash_password, verify_password,
 )
-from app.ml.predictor import predict, train
+from app.ml.predictor import explain_prediction, predict, train
 from app.ml.recommendations import build_recommendations, performance_category
 
 router = APIRouter()
@@ -178,6 +178,38 @@ def create_prediction(
     return PredictionResponse.model_validate(prediction)
 
 
+@router.post("/api/predictions/simulate")
+def simulate_prediction(
+    payload: PredictionSimulationInput,
+    user: User = Depends(get_current_user),
+):
+    """Compare two scenarios with the same deployed model without saving either result."""
+    if (
+        payload.baseline.subject.strip().casefold() != payload.scenario.subject.strip().casefold()
+        or payload.baseline.semester.strip().casefold() != payload.scenario.semester.strip().casefold()
+    ):
+        raise HTTPException(
+            status_code=422,
+            detail="Baseline and scenario must use the same subject and semester.",
+        )
+
+    baseline_score, artifact = predict(payload.baseline.model_dump())
+    scenario_score, scenario_artifact = predict(payload.scenario.model_dump())
+    if artifact["version"] != scenario_artifact["version"]:
+        raise HTTPException(status_code=503, detail="The prediction model changed during simulation. Please retry.")
+
+    return {
+        "baseline_score": baseline_score,
+        "scenario_score": scenario_score,
+        "change": round(scenario_score - baseline_score, 1),
+        "model_version": artifact["version"],
+        "dataset": artifact["dataset"],
+        "is_synthetic_demo": "synthetic" in artifact["dataset"].lower(),
+        "saved": False,
+        "disclaimer": "This is a scenario comparison from the currently deployed model, not a guaranteed academic outcome.",
+    }
+
+
 @router.get("/api/predictions/history")
 def prediction_history(
     page: int = Query(1, ge=1),
@@ -206,6 +238,41 @@ def prediction_detail(prediction_id: int, user: User = Depends(get_current_user)
     if not prediction or prediction.user_id != user.id:
         raise HTTPException(status_code=404, detail="Prediction not found")
     return PredictionResponse.model_validate(prediction)
+
+
+@router.get("/api/predictions/{prediction_id}/explanation")
+def prediction_explanation(
+    prediction_id: int,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    prediction = db.get(Prediction, prediction_id)
+    if not prediction or prediction.user_id != user.id:
+        raise HTTPException(status_code=404, detail="Prediction not found")
+
+    explanation = explain_prediction(prediction.input_data)
+    if explanation["version"] != prediction.model_version:
+        raise HTTPException(
+            status_code=409,
+            detail="The saved prediction uses a different model version. A matching explanation is unavailable.",
+        )
+
+    return {
+        "prediction_id": prediction.id,
+        "model_version": explanation["version"],
+        "dataset": explanation["dataset"],
+        "baseline_score": explanation["baseline_score"],
+        "raw_model_output": explanation["raw_model_output"],
+        "predicted_score": explanation["predicted_score"],
+        "method": explanation["method"],
+        "is_causal": explanation["is_causal"],
+        "contributions": explanation["contributions"],
+        "disclaimer": (
+            "Contributions describe how this Ridge model uses each input relative to "
+            "training feature means. They are not causal effects or proof of real-world "
+            "student outcomes. The current repository model uses synthetic demonstration data."
+        ),
+    }
 
 
 @router.delete("/api/predictions/{prediction_id}", status_code=204)
@@ -324,6 +391,9 @@ def admin_models(admin: User = Depends(require_admin)):
         "version": artifact["version"], "dataset": artifact["dataset"],
         "training_rows": artifact["training_rows"], "test_rows": artifact["test_rows"],
         "metrics": artifact["metrics"], "features": artifact["features"],
+        "model_type": "Ridge regression",
+        "is_synthetic_demo": "synthetic" in artifact["dataset"].lower(),
+        "evaluation_note": "Metrics are measured on a held-out split of the documented dataset; synthetic-demo metrics are not evidence of real-world student performance.",
     }
 
 
