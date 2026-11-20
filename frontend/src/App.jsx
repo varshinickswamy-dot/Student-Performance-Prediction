@@ -3,7 +3,7 @@ import { Link, Navigate, Route, Routes, useNavigate, useParams } from "react-rou
 import {
   Activity, BarChart3, BookOpen, ChevronRight, GraduationCap, History,
   LayoutDashboard, LogOut, Menu, Moon, ShieldCheck, Sun, Target,
-  TrendingUp, UserRound, Users, X, BrainCircuit, Settings, ClipboardList,
+  TrendingUp, UserRound, Users, X, BrainCircuit, Settings, ClipboardList, Sparkles,
   CalendarDays, ShieldAlert, Bell, Bot, MessageSquare, CheckCircle2, Plus,
 } from "lucide-react";
 import {
