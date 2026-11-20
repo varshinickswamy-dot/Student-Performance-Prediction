@@ -16,3 +16,6 @@ venv/
 *.db
 !backend/app/database/
 
+
+# Offline candidate models and reports (never production artifacts)
+backend/app/ml/model_artifacts/candidates/
