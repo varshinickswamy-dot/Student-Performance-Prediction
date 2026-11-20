@@ -24,3 +24,34 @@
 .pagination .button{padding:8px 12px}
 .api-notification{position:fixed;z-index:100;right:20px;bottom:20px;max-width:min(440px,calc(100vw - 32px));padding:14px 18px;border:1px solid color-mix(in srgb,var(--danger) 50%,var(--border));border-radius:11px;background:var(--card);color:var(--text);box-shadow:0 12px 40px rgba(0,0,0,.24);font-size:13px}
 @media(max-width:425px){.page-actions{width:100%;margin-top:12px}.page-actions .button{flex:1}.pagination{justify-content:center}}
+
+
+/* Explainable prediction and what-if simulator */
+.explanation-panel{margin-top:16px}
+.explanation-note{font-size:12px;line-height:1.6}
+.explanation-baseline{display:flex;align-items:center;gap:14px;flex-wrap:wrap;padding:14px;border:1px solid var(--border);border-radius:10px;background:var(--bg);margin:14px 0}
+.explanation-baseline span{color:var(--muted);font-size:12px}
+.explanation-baseline strong{font-size:22px;color:var(--primary)}
+.contribution-list{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px 22px;margin:18px 0}
+.contribution-row{min-width:0}
+.contribution-heading{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:7px;text-transform:capitalize;font-size:12px}
+.contribution-heading strong{font-variant-numeric:tabular-nums}
+.positive{color:var(--success)!important}
+.negative{color:var(--danger)!important}
+.neutral{color:var(--muted)!important}
+.contribution-track{height:7px;border-radius:99px;background:var(--border);overflow:hidden}
+.contribution-fill{height:100%;border-radius:99px}
+.contribution-fill.positive{background:var(--success)}
+.contribution-fill.negative{background:var(--danger)}
+.contribution-fill.neutral{background:var(--muted)}
+.simulator-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}
+.simulator-card{margin:0}
+.simulator-card h3{margin-bottom:18px}
+.simulator-field{display:grid;gap:7px;margin-bottom:13px;color:var(--muted);font-size:12px;font-weight:600;text-transform:none}
+.simulator-result{margin-top:18px}
+.simulator-result-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin:18px 0}
+.simulator-result-grid>div{display:grid;gap:7px;padding:16px;border:1px solid var(--border);border-radius:10px;background:var(--bg)}
+.simulator-result-grid span{font-size:12px;color:var(--muted)}
+.simulator-result-grid strong{font-size:25px;font-variant-numeric:tabular-nums}
+@media(max-width:768px){.simulator-grid{grid-template-columns:1fr}.contribution-list{grid-template-columns:1fr}.simulator-result-grid{grid-template-columns:1fr 1fr}}
+@media(max-width:425px){.simulator-result-grid{grid-template-columns:1fr}.explanation-baseline{align-items:flex-start;flex-direction:column}}
