@@ -238,7 +238,7 @@ def test_academic_intelligence_goals_notifications_and_assistant():
     })
     assert assistant.status_code == 200
     assert assistant.json()["provider"] == "built_in_contextual_fallback"
-    assert "58%" in assistant.json()["answer"]
+    assert "58.0%" in assistant.json()["answer"]
 
 
 def test_teacher_portal_assignment_isolation_and_institution_analytics():
