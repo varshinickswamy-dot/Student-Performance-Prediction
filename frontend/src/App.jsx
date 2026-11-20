@@ -13,6 +13,7 @@ import {
 import { jsPDF } from "jspdf";
 import api, { getApiErrorMessage, reportApiError } from "./api";
 import AcademicGrowthHub from "./AcademicGrowthHub";
+import FinalExamPrediction from "./FinalExamPrediction";
 
 function useAuth() {
   const [user, setUser] = useState(() => {
@@ -216,7 +217,7 @@ function AppShell({ auth, admin=false, children }) {
   ] : role==="institution_admin" ? [
     ["/institution",BarChart3,"Institution Analytics"],["/institution/intelligence",BrainCircuit,"Institution Intelligence"],["/profile",UserRound,"My Profile"]
   ] : [
-    ["/dashboard",LayoutDashboard,"Overview"],["/growth-lab",Sparkles,"AI Growth Lab"],["/predict",Target,"Predict Performance"],["/simulate",Activity,"What-if Simulator"],["/risk",ShieldAlert,"Risk Assessment"],["/study-plan",CalendarDays,"Study Planner"],["/activities",ClipboardList,"Activity Tracker"],["/goals",CheckCircle2,"Study Goals"],["/assistant",Bot,"AI Assistant"],["/notifications",Bell,"Notifications"],["/predictions",History,"My Predictions"],["/analytics",BarChart3,"Academic Analytics"],["/recommendations",Activity,"Recommendations"],["/profile",UserRound,"My Profile"]
+    ["/dashboard",LayoutDashboard,"Overview"],["/growth-lab",Sparkles,"AI Growth Lab"],["/predict",Target,"Predict Performance"],["/final-exam",BrainCircuit,"Final Exam Estimator"],["/simulate",Activity,"What-if Simulator"],["/risk",ShieldAlert,"Risk Assessment"],["/study-plan",CalendarDays,"Study Planner"],["/activities",ClipboardList,"Activity Tracker"],["/goals",CheckCircle2,"Study Goals"],["/assistant",Bot,"AI Assistant"],["/notifications",Bell,"Notifications"],["/predictions",History,"My Predictions"],["/analytics",BarChart3,"Academic Analytics"],["/recommendations",Activity,"Recommendations"],["/profile",UserRound,"My Profile"]
   ];
   return (
     <div className="app-shell">
@@ -775,6 +776,7 @@ export default function App() {
     <Route path="/dashboard" element={<Protected auth={auth}><Dashboard/></Protected>}/>
     <Route path="/growth-lab" element={<Protected auth={auth} roles={["student"]}><AcademicGrowthHub/></Protected>}/>
     <Route path="/predict" element={<Protected auth={auth}><PredictionForm/></Protected>}/>
+    <Route path="/final-exam" element={<Protected auth={auth} roles={["student"]}><FinalExamPrediction/></Protected>}/>
     <Route path="/simulate" element={<Protected auth={auth}><WhatIfSimulator/></Protected>}/>
     <Route path="/risk" element={<Protected auth={auth} roles={["student"]}><AcademicRiskPage/></Protected>}/>
     <Route path="/study-plan" element={<Protected auth={auth} roles={["student"]}><StudyPlannerPage/></Protected>}/>
