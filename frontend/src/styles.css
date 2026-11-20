@@ -98,3 +98,6 @@
 .heatmap-tile strong{font-size:25px;font-variant-numeric:tabular-nums}
 .heatmap-tile span{text-transform:capitalize;font-weight:650}
 .heatmap-tile small{color:var(--muted)}
+
+.assistant-consent{display:flex;align-items:flex-start;gap:9px;margin:14px 0;color:var(--muted);font-size:12px;line-height:1.5}
+.assistant-consent input{margin-top:2px}
