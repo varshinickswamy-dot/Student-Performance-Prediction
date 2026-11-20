@@ -347,3 +347,48 @@ def test_candidate_training_rejects_missing_features_and_small_datasets():
         train_candidate_from_frame(pd.DataFrame({"score": [50] * 120}))
     with pytest.raises(ValueError, match="At least 100"):
         train_candidate_from_frame(synthetic_training_frame(rows=50))
+
+
+
+def test_student_activity_tracking_is_validated_and_owner_scoped():
+    first = client.post("/api/auth/register", json={
+        "full_name": "Activity Owner", "email": "activity-owner@example.com",
+        "password": "StrongPassword123", "confirm_password": "StrongPassword123",
+    })
+    headers = {"Authorization": f"Bearer {first.json()['access_token']}"}
+    study = client.post("/api/student/activities", headers=headers, json={
+        "activity_type": "study_session", "subject": "Physics",
+        "value": 2.5, "occurred_on": "2026-11-20",
+    })
+    assert study.status_code == 201
+    attendance = client.post("/api/student/activities", headers=headers, json={
+        "activity_type": "attendance", "subject": "Physics",
+        "value": 1, "occurred_on": "2026-11-20",
+    })
+    assert attendance.status_code == 201
+    assignment = client.post("/api/student/activities", headers=headers, json={
+        "activity_type": "assignment", "subject": "Physics",
+        "value": 82, "occurred_on": "2026-11-20",
+    })
+    assert assignment.status_code == 201
+
+    invalid_attendance = client.post("/api/student/activities", headers=headers, json={
+        "activity_type": "attendance", "subject": "Physics",
+        "value": 75, "occurred_on": "2026-11-20",
+    })
+    assert invalid_attendance.status_code == 422
+
+    summary = client.get("/api/student/activities/summary", headers=headers)
+    assert summary.status_code == 200
+    assert summary.json()["study_hours_last_7_days"] == 2.5
+    assert summary.json()["recorded_attendance_percentage"] == 100
+    assert summary.json()["average_assignment_score"] == 82
+
+    other = client.post("/api/auth/register", json={
+        "full_name": "Other Activity User", "email": "activity-other@example.com",
+        "password": "StrongPassword123", "confirm_password": "StrongPassword123",
+    })
+    other_headers = {"Authorization": f"Bearer {other.json()['access_token']}"}
+    assert client.delete(
+        f"/api/student/activities/{study.json()['id']}", headers=other_headers
+    ).status_code == 404
