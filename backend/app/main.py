@@ -1,11 +1,12 @@
 import os
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from app.api import router
 from app.database import Base, engine, SessionLocal
 from app.models import User
 from app.core.security import hash_password
 from app.ml.predictor import train
+from sqlalchemy import text
 
 Base.metadata.create_all(bind=engine)
 
@@ -55,4 +56,38 @@ def startup():
 
 @app.get("/api/health")
 def health():
+    # Backward-compatible liveness response used by existing deployment checks.
     return {"status": "ok", "model": "available"}
+
+
+@app.get("/api/health/live")
+def liveness():
+    return {"status": "alive"}
+
+
+@app.get("/api/health/ready")
+def readiness():
+    """Check the dependencies required to serve authenticated predictions."""
+    checks = {"database": "unavailable", "model": "unavailable"}
+    try:
+        with engine.connect() as connection:
+            connection.execute(text("SELECT 1"))
+        checks["database"] = "available"
+    except Exception:
+        pass
+
+    try:
+        artifact = train()
+        checks["model"] = "available"
+        checks["model_version"] = artifact.get("version", "unknown")
+        checks["dataset"] = artifact.get("dataset", "unknown")
+    except Exception:
+        pass
+
+    if checks["database"] != "available" or checks["model"] != "available":
+        raise HTTPException(
+            status_code=503,
+            detail={"status": "not_ready", "checks": checks},
+        )
+
+    return {"status": "ready", "checks": checks}
