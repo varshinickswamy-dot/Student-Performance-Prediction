@@ -771,6 +771,7 @@ def academic_assistant(
     if os.getenv("ENVIRONMENT", "development").lower() in {"production", "prod"} and not base_url.startswith("https://"):
         raise HTTPException(status_code=503, detail="The configured AI provider must use HTTPS in production.")
 
+    provider_risk = {key: value for key, value in risk.items() if key != "latest_prediction_id"}
     context = {
         "latest_assessment": None if latest is None else {
             "subject": latest.subject, "semester": latest.semester,
@@ -778,7 +779,7 @@ def academic_assistant(
             "category": latest.performance_category,
             "input_data": latest.input_data,
         },
-        "support_assessment": risk,
+        "support_assessment": provider_risk,
         "dataset_warning": "The deployed model is trained on synthetic demonstration data; do not present its estimates as validated real-world outcomes.",
     }
     try:
