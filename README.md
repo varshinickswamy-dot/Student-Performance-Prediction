@@ -92,3 +92,13 @@ npm run build
 - Never commit `.env` files or secrets.
 
 See [deployment guide](docs/DEPLOYMENT_GUIDE.md), [ML methodology and candidate training](docs/ML_METHODOLOGY.md), and [Android integration guide](docs/ANDROID_INTEGRATION.md).
+
+
+## Academic Growth Lab
+
+The authenticated student workspace at `/growth-lab` adds a descriptive Digital Twin snapshot, a four-week recovery checklist, an exam preparation schedule, a topic-based practice prompt generator, a transparent career skill-map checklist, and exploratory scholarship pathway screening. These features use the signed-in student's own records or explicit self-reported form inputs. They do not retrain or replace the deployed Ridge model.
+
+Staff intelligence endpoints are role-protected: `GET /api/teacher/intelligence` includes only assigned students; `GET /api/institution/intelligence` returns institution aggregates and suppresses department/semester groups smaller than five.
+
+Important limitations: career readiness is a small illustrative skill-map coverage measure, not a hiring probability. Scholarship results are potential pathways, not verified live awards or eligibility decisions. Practice questions are generated prompts, not actual or leaked exam questions. See [Academic Growth Lab guide](docs/ACADEMIC_GROWTH_LAB.md).
+
