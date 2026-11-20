@@ -102,3 +102,9 @@ Staff intelligence endpoints are role-protected: `GET /api/teacher/intelligence`
 
 Important limitations: career readiness is a small illustrative skill-map coverage measure, not a hiring probability. Scholarship results are potential pathways, not verified live awards or eligibility decisions. Practice questions are generated prompts, not actual or leaked exam questions. See [Academic Growth Lab guide](docs/ACADEMIC_GROWTH_LAB.md).
 
+
+## ML validation upgrades
+
+The offline candidate trainer now audits dataset missingness, duplicates, feature/target distributions, constant features, and unusually high correlations for human leakage review. It rejects unsupported boolean values, supports group-isolated student-level holdout and cross-validation, compares candidate models against a mean baseline, and records expanded held-out regression metrics and residual diagnostics.
+
+This remains an offline candidate workflow. It does not retrain or replace the deployed synthetic demonstration model. No real authorized student dataset is currently present in the repository; a dataset owner must provide one with documented provenance and permission before a real-world model can be evaluated.
