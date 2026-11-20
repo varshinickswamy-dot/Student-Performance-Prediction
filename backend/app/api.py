@@ -28,6 +28,8 @@ from app.ml.academic_intelligence import (
 from app.academic_extension_schemas import (
     ExamPrepRequest, QuestionGeneratorRequest, CareerReadinessRequest, ScholarshipScreenRequest,
 )
+from app.student_candidate_schemas import FinalExamPredictionRequest
+from app.ml.student_candidate_inference import CandidateUnavailableError, predict_final_exam_score
 from app.ml.academic_extensions import (
     digital_twin_snapshot, recovery_plan, exam_preparation_plan, practice_questions,
     career_readiness, scholarship_pathways,
@@ -192,6 +194,20 @@ def create_prediction(
     db.commit()
     db.refresh(prediction)
     return PredictionResponse.model_validate(prediction)
+
+
+
+
+@router.post("/api/student/final-exam-prediction")
+def final_exam_prediction(
+    payload: FinalExamPredictionRequest,
+    user: User = Depends(get_current_user),
+):
+    """Opt-in prediction from the separate synthetic final-exam candidate."""
+    try:
+        return predict_final_exam_score(payload.model_dump())
+    except CandidateUnavailableError as exc:
+        raise HTTPException(status_code=503, detail=str(exc))
 
 
 @router.post("/api/predictions/simulate")
