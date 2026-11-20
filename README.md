@@ -11,8 +11,8 @@ EduPredict is a full-stack academic analytics application for student performanc
 - Authenticated model explanations using additive Ridge coefficient contributions
 - What-if scenario comparisons using the same deployed prediction pipeline without saving simulated records
 - Separate liveness and dependency-readiness endpoints for deployment monitoring
-- Student profile management
-- Role-based administrator dashboard and audit logs
+- Student profile management\n- Rule-based academic support assessment with transparent factors (not a validated probability)\n- Seven-day personalized study planner based on the student's latest saved inputs\n- Persistent study goals with completion tracking\n- Contextual academic assistant with a built-in fallback and optional server-side OpenAI-compatible provider\n- Dynamic notifications for support indicators and upcoming/overdue study goals\n- Role-separated teacher and institution workspaces with assigned-student isolation and intervention notes
+- Role-based administrator dashboard, teacher account provisioning, student assignment management, and audit logs
 - Vercel-compatible frontend and independently deployable FastAPI backend
 - Prediction report download and paginated history
 - Downloadable, formatted PDF prediction reports
@@ -69,7 +69,7 @@ The initial demonstration credentials are configurable with `ADMIN_USERNAME` and
 
 The demo Ridge regression pipeline uses study hours, previous marks, attendance, assignment scores, class participation, homework completion, sleep hours, extracurricular activity, internet access, and family support. The synthetic data and target are generated deterministically with random seed 42. The model uses an 80/20 train/test split.
 
-The actual evaluation metrics are exposed by `GET /api/admin/models`. The current artifact is explicitly identified as a synthetic demonstration model; its metrics are not evidence of real-world student performance. No fixed or promised accuracy is used.
+The actual evaluation metrics are exposed by `GET /api/admin/models`. An offline candidate comparison command is available as `python -m app.ml.train_candidate`; it requires an authorized CSV path and saves a candidate artifact separately without replacing the deployed model. The current artifact is explicitly identified as a synthetic demonstration model; its metrics are not evidence of real-world student performance. No fixed or promised accuracy is used.
 
 The API also exposes `GET /api/predictions/{prediction_id}/explanation` for authenticated, owner-scoped additive Ridge coefficient contributions and `POST /api/predictions/simulate` for non-persisted what-if comparisons. These use the same deployed artifact as ordinary predictions. See [ML methodology](docs/ML_METHODOLOGY.md) for interpretation and limitations.
 
@@ -91,4 +91,4 @@ npm run build
 - Set `ENVIRONMENT=production`; startup rejects the development JWT secret, missing frontend origin, and default administrator password.
 - Never commit `.env` files or secrets.
 
-See the documents in `docs/`.
+See [deployment guide](docs/DEPLOYMENT_GUIDE.md), [ML methodology and candidate training](docs/ML_METHODOLOGY.md), and [Android integration guide](docs/ANDROID_INTEGRATION.md).
