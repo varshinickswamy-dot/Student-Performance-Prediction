@@ -376,5 +376,5 @@ def main() -> None:
     }, indent=2))
 
 
-if __(!)__name__ == "__main__":
+if __name__ == "__main__":
     main()
