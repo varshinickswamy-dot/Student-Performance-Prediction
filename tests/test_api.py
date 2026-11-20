@@ -263,6 +263,10 @@ def test_teacher_portal_assignment_isolation_and_institution_analytics():
         "email": "portal-admin@example.com", "password": "AdminPassword123!",
     })
     admin_headers = {"Authorization": f"Bearer {admin_login.json()['access_token']}"}
+    monitoring = client.get("/api/admin/model-monitoring", headers=admin_headers)
+    assert monitoring.status_code == 200
+    assert monitoring.json()["status"] in {"insufficient_data", "exploratory"}
+    assert client.get("/api/admin/teaching-staff", headers=admin_headers).status_code == 200
 
     student_response = client.post("/api/auth/register", json={
         "full_name": "Assigned Student", "email": "assigned@example.com",
