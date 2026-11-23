@@ -17,7 +17,15 @@ EduPredict is a full-stack academic analytics application for student performanc
 - Authenticated model explanations using additive Ridge coefficient contributions
 - What-if scenario comparisons using the same deployed prediction pipeline without saving simulated records
 - Separate liveness and dependency-readiness endpoints for deployment monitoring
-- Student profile management\n- Rule-based academic support assessment with transparent factors (not a validated probability)\n- Seven-day personalized study planner based on the student's latest saved inputs\n- Persistent study goals with completion tracking\n- Student-entered study-session, attendance and assignment activity tracker with 7-day/30-day summaries\n- Subject-by-semester heatmap and semester comparison analytics\n- Contextual academic assistant with a built-in fallback and optional server-side OpenAI-compatible provider\n- Dynamic notifications for support indicators and upcoming/overdue study goals\n- Role-separated teacher and institution workspaces with assigned-student isolation and intervention notes
+- Student profile management
+- Rule-based academic support assessment with transparent factors (not a validated probability)
+- Seven-day personalized study planner based on the student's latest saved inputs
+- Persistent study goals with completion tracking
+- Student-entered study-session, attendance and assignment activity tracker with 7-day/30-day summaries
+- Subject-by-semester heatmap and semester comparison analytics
+- Contextual academic assistant with a built-in fallback and optional server-side OpenAI-compatible provider
+- Dynamic notifications for support indicators and upcoming/overdue study goals
+- Role-separated teacher and institution workspaces with assigned-student isolation and intervention notes
 - Role-based administrator dashboard, teacher account provisioning, student assignment management, and audit logs
 - Vercel-compatible frontend and independently deployable FastAPI backend
 - Separate final-exam candidate estimator UI at `/final-exam`, backed by an authenticated, opt-in API; it never replaces the original deployed model
@@ -65,12 +73,9 @@ npm run dev
 
 Open http://localhost:5173.
 
-## Administrator login
+## Local administrator setup
 
-- Username: `admin`
-- Password: `admin123`
-
-The initial demonstration credentials are configurable with `ADMIN_USERNAME` and `ADMIN_PASSWORD`. Change the password before deployment. Stored passwords are PBKDF2-hashed; the initial value is never stored as plain text.
+For local development only, configure `ADMIN_USERNAME` and a strong `ADMIN_PASSWORD` in your untracked backend `.env` file. The application hashes the configured password before storage. Do not publish administrator credentials or reuse local credentials in production. Production startup rejects the default demonstration password.
 
 ## Model methodology
 
@@ -129,3 +134,8 @@ The student workspace includes a separate estimator at `/final-exam`. It sends t
 To enable this optional endpoint on a backend host, first create and review the local candidate using the instructions in [Synthetic Dataset Benchmark](docs/SYNTHETIC_DATASET_BENCHMARK.md), then securely provide the candidate Joblib artifact to the backend and set `EDUPREDICT_STUDENT_CANDIDATE_ARTIFACT` to its absolute path. Do not commit the artifact or the source CSV. If the variable or file is absent, the endpoint returns HTTP 503 with a clear message; it does not generate a placeholder prediction. The UI therefore remains safely unavailable until the reviewed artifact is configured.
 
 Every returned score is labelled as a synthetic demonstration estimate. It is not validated for real students and must not be used for grading, admissions, scholarship, disciplinary, or other high-impact decisions.
+
+
+## Project report
+
+The complete academic project report covers the system architecture, requirements, implementation, model methodology, limitations, testing plan, deployment and appendices. The report is maintained as a separate submission artifact; add the final reviewed PDF to the repository only if you want it publicly downloadable.
