@@ -1,5 +1,11 @@
 # EduPredict - Student Performance Prediction
 
+## 🚀 Live Demo
+
+**Frontend:** [Open EduPredict](https://student-performance-prediction-amber.vercel.app)
+
+**Backend API:** [Open API Health Check](https://student-performance-backend-nujh.onrender.com/api/health) · [API Documentation](https://student-performance-backend-nujh.onrender.com/docs)
+
 EduPredict is a full-stack academic analytics application for student performance prediction. It includes a React dashboard, FastAPI backend, SQLite/PostgreSQL database support, JWT authentication, role-based administration, and a real scikit-learn Ridge regression model.
 
 ## Features
