@@ -16,6 +16,9 @@ on:
       - "backend/**"
       - "tests/**"
       - "frontend/**"
+      - "docs/**"
+      - "README.md"
+      - "DEVELOPMENT_PROGRESS.md"
       - ".github/workflows/backend-tests.yml"
 
 jobs:
