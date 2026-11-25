@@ -124,6 +124,7 @@ def _issue_verification(db: Session, user: User) -> None:
     else:
         record.token_hash = hashlib.sha256(raw_token.encode()).hexdigest()
         record.expires_at = datetime.now(timezone.utc) + timedelta(minutes=30)
+        record.created_at = datetime.now(timezone.utc)
         record.verified_at = None
     db.commit()
     _send_verification_email(user, raw_token)
