@@ -226,3 +226,20 @@ input:hover,select:hover,textarea:hover { border-color:color-mix(in srgb,var(--p
 @media(max-width:520px) {
   .chart-empty { min-height:210px;padding:18px 10px; }
 }
+
+
+/* Interactive weekly planner progress */
+.planner-progress { margin:20px 0; }
+.planner-progress-head { display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:14px; }
+.planner-progress-head h3 { margin:5px 0 0;font-size:17px; }
+.planner-progress-head>strong { color:var(--primary);font-size:26px;letter-spacing:-.04em; }
+.planner-progress-track { height:10px;background:var(--surface-hover);border:1px solid var(--border);border-radius:99px;overflow:hidden; }
+.planner-progress-track span { display:block;height:100%;background:var(--primary);border-radius:inherit;transition:width .25s ease; }
+.planner-day-subject { display:flex;justify-content:space-between;align-items:center;gap:10px;margin:12px 0; }
+.planner-task-list { list-style:none;padding:0;margin:0;display:grid;gap:10px; }
+.planner-task { display:flex;align-items:flex-start;gap:10px;padding:10px 11px;border:1px solid var(--border);border-radius:10px;background:var(--surface-elevated);cursor:pointer;line-height:1.5; }
+.planner-task input { flex:0 0 auto;width:17px;height:17px;margin:2px 0 0;accent-color:var(--primary); }
+.planner-task span { min-width:0; }
+.planner-task.completed span { color:var(--muted);text-decoration:line-through; }
+.planner-task.completed { background:var(--surface-hover); }
+@media(max-width:520px) { .planner-progress-head { align-items:flex-start; } .planner-day-subject { align-items:flex-start;flex-direction:column; } }
