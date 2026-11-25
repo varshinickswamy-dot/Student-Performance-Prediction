@@ -622,9 +622,43 @@ function AcademicRiskPage() {
 function StudyPlannerPage() {
   const [hours,setHours]=useState(2),[subject,setSubject]=useState("");
   const [plan,setPlan]=useState(null),[error,setError]=useState(""),[loading,setLoading]=useState(false);
-  const generate=async e=>{e.preventDefault();setLoading(true);setError("");try{const r=await api.post("/api/student/study-plan",{available_hours_per_day:Number(hours),focus_subject:subject||null});setPlan(r.data)}catch(err){setError(getApiErrorMessage(err))}finally{setLoading(false)}};
-  return <><div className="page-heading"><div><span>Personalized learning</span><h1>Weekly study planner</h1></div></div><article className="panel"><form className="form-grid" onSubmit={generate}><label>Focus subject<input value={subject} onChange={e=>setSubject(e.target.value)} placeholder="Use latest assessment subject if blank"/></label><label>Available study hours per day<input type="number" min="0.5" max="8" step="0.5" value={hours} onChange={e=>setHours(e.target.value)}/></label><button className="button primary" disabled={loading}>{loading?"Generating...":"Generate 7-day plan"}</button></form>{error&&<div className="alert">{error}</div>}</article>
-    {plan&&<><div className="planner-grid">{plan.days.map(day=><article className="panel planner-day" key={day.day}><div className="planner-day-head"><div><span>{day.date}</span><h3>{day.day}</h3></div><span className="badge">{day.estimated_hours} hrs</span></div><strong>{day.subject}</strong><ul>{day.activities.map((task,i)=><li key={i}>{task}</li>)}</ul></article>)}</div><p className="muted">{plan.disclaimer}</p></>}
+  const [completed,setCompleted]=useState({});
+  const generate=async e=>{
+    e.preventDefault();setLoading(true);setError("");
+    try {
+      const r=await api.post("/api/student/study-plan",{available_hours_per_day:Number(hours),focus_subject:subject||null});
+      setPlan(r.data);setCompleted({});
+    } catch(err) { setError(getApiErrorMessage(err)); }
+    finally { setLoading(false); }
+  };
+  const allTasks=plan?.days?.flatMap((day,dayIndex)=>day.activities.map((task,taskIndex)=>({key:`${dayIndex}-${taskIndex}`,task})))||[];
+  const doneCount=allTasks.filter(task=>completed[task.key]).length;
+  const percent=allTasks.length?Math.round(doneCount/allTasks.length*100):0;
+  const toggleTask=key=>setCompleted(current=>({...current,[key]:!current[key]}));
+  return <>
+    <div className="page-heading"><div><span>Personalized learning</span><h1>Weekly study planner</h1><p className="muted">Build a realistic seven-day plan around your available study time.</p></div></div>
+    <article className="panel"><form className="form-grid" onSubmit={generate}>
+      <label>Focus subject<input value={subject} onChange={e=>setSubject(e.target.value)} placeholder="Use latest assessment subject if blank"/></label>
+      <label>Available study hours per day<input type="number" min="0.5" max="8" step="0.5" value={hours} onChange={e=>setHours(e.target.value)} required/></label>
+      <button className="button primary" disabled={loading}>{loading?"Generating...":"Generate 7-day plan"}</button>
+    </form>{error&&<div className="alert" role="alert">{error}</div>}</article>
+    {plan&&<>
+      <article className="panel planner-progress">
+        <div className="planner-progress-head"><div><span>YOUR WEEKLY PROGRESS</span><h3>{doneCount} of {allTasks.length} activities completed</h3></div><strong>{percent}%</strong></div>
+        <div className="planner-progress-track" role="progressbar" aria-label="Weekly study plan completion" aria-valuemin={0} aria-valuemax={100} aria-valuenow={percent}><span style={{width:`${percent}%`}}/></div>
+        <p className="muted">{percent===100&&allTasks.length?"Excellent work — you've completed every activity in this plan.":"Tick off each activity as you complete it. Progress is tracked while this plan remains open."}</p>
+      </article>
+      <div className="planner-grid">{plan.days.map((day,dayIndex)=>{
+        const dayTasks=day.activities.map((task,taskIndex)=>({key:`${dayIndex}-${taskIndex}`,task}));
+        const dayDone=dayTasks.filter(item=>completed[item.key]).length;
+        return <article className="panel planner-day" key={day.day}>
+          <div className="planner-day-head"><div><span>{day.date}</span><h3>{day.day}</h3></div><span className="badge">{day.estimated_hours} hrs</span></div>
+          <div className="planner-day-subject"><strong>{day.subject}</strong><span className="muted">{dayDone}/{dayTasks.length} done</span></div>
+          <ul className="planner-task-list">{dayTasks.map(({key,task})=><li key={key}><label className={completed[key]?"planner-task completed":"planner-task"}><input type="checkbox" checked={!!completed[key]} onChange={()=>toggleTask(key)}/><span>{task}</span></label></li>)}</ul>
+        </article>;
+      })}</div>
+      <p className="muted">{plan.disclaimer}</p>
+    </>}
   </>;
 }
 
