@@ -1,6 +1,8 @@
 import os
 import time
-from datetime import datetime, timezone
+import hashlib
+import secrets
+from datetime import datetime, timedelta, timezone
 import httpx
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, status
 from sqlalchemy import func
@@ -8,12 +10,12 @@ from sqlalchemy.orm import Session
 import jwt
 
 from app.database import get_db
-from app.models import AcademicActivity, AuditLog, InterventionNote, Prediction, StudyGoal, TeacherAssignment, User
+from app.models import AcademicActivity, AuditLog, EmailVerification, InterventionNote, Prediction, StudyGoal, TeacherAssignment, User
 from app.schemas import (
     LoginRequest, PredictionInput, PredictionResponse, ProfileUpdate,
     RegisterRequest, PredictionSimulationInput, TokenResponse, UserResponse,
     StudyGoalCreate, StudyGoalUpdate, StudyPlanRequest, AssistantQuestion,
-    TeacherCreate, TeacherAssignmentCreate, InterventionNoteCreate, AcademicActivityCreate,
+    TeacherCreate, TeacherAssignmentCreate, InterventionNoteCreate, AcademicActivityCreate,\n    EmailVerificationRequest, EmailResendRequest,
 )
 from app.core.security import (
     JWT_ALGORITHM, JWT_SECRET_KEY, create_access_token,
@@ -68,12 +70,73 @@ def require_admin(user: User = Depends(get_current_user)) -> User:
     return user
 
 
+def email_verification_required() -> bool:
+    return os.getenv("ENVIRONMENT", "development").lower() in {"production", "prod"}
+
+
+def _verification_frontend_url() -> str:
+    origins = [item.strip().rstrip("/") for item in os.getenv("FRONTEND_URL", "").split(",") if item.strip()]
+    if not origins:
+        raise HTTPException(status_code=503, detail="Email verification is not configured. Please contact the administrator.")
+    return origins[0]
+
+
+def _send_verification_email(user: User, raw_token: str) -> None:
+    api_key = os.getenv("RESEND_API_KEY")
+    sender = os.getenv("EMAIL_FROM")
+    if not api_key or not sender:
+        raise HTTPException(status_code=503, detail="Email verification is temporarily unavailable. Please contact the administrator.")
+    verification_url = f"{_verification_frontend_url()}/verify-email?token={raw_token}"
+    payload = {
+        "from": sender,
+        "to": [user.email],
+        "subject": "Verify your EduPredict email address",
+        "html": (
+            f"<p>Hello {user.full_name},</p>"
+            "<p>Verify your email address to activate your EduPredict account.</p>"
+            f'<p><a href="{verification_url}">Verify email address</a></p>'
+            "<p>This link expires in 30 minutes. If you did not create this account, ignore this email.</p>"
+        ),
+        "text": f"Hello {user.full_name}, verify your EduPredict account: {verification_url}. This link expires in 30 minutes.",
+    }
+    try:
+        response = httpx.post(
+            "https://api.resend.com/emails",
+            headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
+            json=payload,
+            timeout=15.0,
+        )
+        response.raise_for_status()
+    except httpx.HTTPError:
+        raise HTTPException(status_code=502, detail="We could not send the verification email. Use Resend verification to try again.")
+
+
+def _issue_verification(db: Session, user: User) -> None:
+    raw_token = secrets.token_urlsafe(32)
+    record = db.query(EmailVerification).filter(EmailVerification.user_id == user.id).first()
+    if record is None:
+        record = EmailVerification(
+            user_id=user.id,
+            token_hash=hashlib.sha256(raw_token.encode()).hexdigest(),
+            expires_at=datetime.now(timezone.utc) + timedelta(minutes=30),
+        )
+        db.add(record)
+    else:
+        record.token_hash = hashlib.sha256(raw_token.encode()).hexdigest()
+        record.expires_at = datetime.now(timezone.utc) + timedelta(minutes=30)
+        record.verified_at = None
+    db.commit()
+    _send_verification_email(user, raw_token)
+
+
 @router.post("/api/auth/register", status_code=201)
 def register(payload: RegisterRequest, db: Session = Depends(get_db)):
     if payload.password != payload.confirm_password:
         raise HTTPException(status_code=422, detail="Passwords do not match")
     if db.query(User).filter(func.lower(User.email) == payload.email.lower()).first():
         raise HTTPException(status_code=409, detail="Email address is already registered")
+    if email_verification_required() and (not os.getenv("RESEND_API_KEY") or not os.getenv("EMAIL_FROM")):
+        raise HTTPException(status_code=503, detail="Registration email verification is not configured. Please contact the administrator.")
     user = User(
         full_name=payload.full_name, email=payload.email.lower(),
         password_hash=hash_password(payload.password), role="student",
@@ -86,8 +149,45 @@ def register(payload: RegisterRequest, db: Session = Depends(get_db)):
     db.refresh(user)
     db.add(AuditLog(actor_id=user.id, action="user_registered"))
     db.commit()
+    if email_verification_required():
+        _issue_verification(db, user)
+        return {"verification_required": True, "email": user.email, "message": "Check your inbox for a verification link. It expires in 30 minutes."}
     token = create_access_token(str(user.id), user.role)
     return TokenResponse(access_token=token, user=public_user(user))
+
+
+@router.post("/api/auth/verify-email")
+def verify_email(payload: EmailVerificationRequest, db: Session = Depends(get_db)):
+    token_hash = hashlib.sha256(payload.token.encode()).hexdigest()
+    record = db.query(EmailVerification).filter(EmailVerification.token_hash == token_hash).first()
+    if not record or record.verified_at is not None:
+        raise HTTPException(status_code=400, detail="This verification link is invalid or has already been used.")
+    expires_at = record.expires_at
+    if expires_at.tzinfo is None:
+        expires_at = expires_at.replace(tzinfo=timezone.utc)
+    if expires_at <= datetime.now(timezone.utc):
+        raise HTTPException(status_code=400, detail="This verification link has expired. Request a new one.")
+    record.verified_at = datetime.now(timezone.utc)
+    record.token_hash = ""
+    db.add(AuditLog(actor_id=record.user_id, action="email_verified"))
+    db.commit()
+    return {"verified": True, "message": "Email verified. You can now sign in."}
+
+
+@router.post("/api/auth/verification/resend")
+def resend_verification(payload: EmailResendRequest, db: Session = Depends(get_db)):
+    user = db.query(User).filter(func.lower(User.email) == payload.email.lower()).first()
+    if user:
+        record = db.query(EmailVerification).filter(EmailVerification.user_id == user.id).first()
+        if record and record.verified_at is None:
+            if record.created_at:
+                created_at = record.created_at
+                if created_at.tzinfo is None:
+                    created_at = created_at.replace(tzinfo=timezone.utc)
+                if datetime.now(timezone.utc) - created_at < timedelta(seconds=60):
+                    return {"message": "If the account needs verification, a fresh email will be available shortly."}
+            _issue_verification(db, user)
+    return {"message": "If the account needs verification, a verification email has been sent."}
 
 
 @router.post("/api/auth/login")
@@ -97,6 +197,9 @@ def login(payload: LoginRequest, db: Session = Depends(get_db)):
         raise HTTPException(status_code=401, detail="Invalid email or password")
     if not user.active:
         raise HTTPException(status_code=403, detail="Account is inactive")
+    verification = db.query(EmailVerification).filter(EmailVerification.user_id == user.id).first()
+    if verification and verification.verified_at is None:
+        raise HTTPException(status_code=403, detail="Please verify your email address before signing in.")
     db.add(AuditLog(actor_id=user.id, action="user_login"))
     db.commit()
     token = create_access_token(str(user.id), user.role)
