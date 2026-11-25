@@ -2,6 +2,7 @@ import os
 import time
 import hashlib
 import secrets
+from html import escape
 from datetime import datetime, timedelta, timezone
 import httpx
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, status
@@ -88,12 +89,13 @@ def _send_verification_email(user: User, raw_token: str) -> None:
     if not api_key or not sender:
         raise HTTPException(status_code=503, detail="Email verification is temporarily unavailable. Please contact the administrator.")
     verification_url = f"{_verification_frontend_url()}/verify-email?token={raw_token}"
+    safe_name = escape(user.full_name)
     payload = {
         "from": sender,
         "to": [user.email],
         "subject": "Verify your EduPredict email address",
         "html": (
-            f"<p>Hello {user.full_name},</p>"
+            f"<p>Hello {safe_name},</p>"
             "<p>Verify your email address to activate your EduPredict account.</p>"
             f'<p><a href="{verification_url}">Verify email address</a></p>'
             "<p>This link expires in 30 minutes. If you did not create this account, ignore this email.</p>"
