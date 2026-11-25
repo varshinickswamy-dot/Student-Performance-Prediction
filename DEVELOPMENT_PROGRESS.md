@@ -25,14 +25,14 @@
 
 ## Remaining tasks requiring owner action or live verification
 
-1. Restore/verify Render environment variables and confirm the backend starts in production. Required values include `DATABASE_URL`, `JWT_SECRET_KEY`, `ADMIN_USERNAME`, `ADMIN_PASSWORD`, `FRONTEND_URL`, and `ENVIRONMENT=production`.
-2. Confirm the Render PostgreSQL database is persistent and that existing records remain intact.
-3. Verify `/api/health/ready` returns ready; then test registration, login, prediction, history, and CORS from the published Vercel site.
-4. Confirm Vercel uses the correct `VITE_API_BASE_URL` and redeploys the latest main branch.
-5. Configure password-reset email delivery only if that feature is required; otherwise keep the honest unavailable response.
+1. Verify Render production environment variables and startup: `DATABASE_URL`, `JWT_SECRET_KEY`, `ADMIN_USERNAME`, `ADMIN_PASSWORD`, `FRONTEND_URL`, and `ENVIRONMENT=production`.
+2. Confirm the Render PostgreSQL database is persistent and existing records remain intact.
+3. Run live smoke tests for `/api/health/ready`, registration, login, prediction, history, and CORS from the published Vercel site. These checks are not yet confirmed.
+4. Confirm Vercel has `VITE_API_BASE_URL=https://student-performance-backend-nujh.onrender.com`; the latest GitHub commit reports a successful Vercel deployment status, but browser-level production flows still need verification.
+5. Configure password-reset email delivery only if that feature is required; otherwise retain the honest unavailable response.
 6. Supply an authorised, documented real student dataset before attempting real-world model evaluation. The current model is synthetic demonstration data only.
 7. Keep the final-exam candidate optional unless its artifact is securely hosted and reviewed. Do not commit private CSVs or Joblib artifacts.
-8. Run the CI workflow and resolve any failing checks before declaring release complete.
+8. Re-check GitHub Actions backend tests and frontend build for the latest main commit before declaring release complete.
 9. If the academic report should be public, add the reviewed PDF to the repository as a separate release/document asset.
 
 ## Release limitations
@@ -83,3 +83,13 @@
 - Added an explicit responsible-use note: charts represent model-generated estimates, not verified academic results or causal evidence.
 - Uses existing analytics API routes; no backend schema or endpoint changes.
 - Pending CI and merge in PR #13; production deployment remains to be verified.
+
+
+## Latest repository verification — 2026-11-25
+
+- PR #13 academic analytics improvements are merged into `main` (commit `49c5b75`).
+- PR #14 adds PostgreSQL stale-connection validation and recycling (commit `e4c7bd4`).
+- PR #15 adds clean recovery from expired authentication sessions (commit `6b2fd82`). Protected API 401 responses clear stored sessions and the app redirects the user to login.
+- The latest main commit reports a successful Vercel deployment status in GitHub.
+- The frontend API client defaults to the deployed Render backend in production and uses `VITE_API_BASE_URL` when configured.
+- Live Render readiness and authenticated end-to-end smoke tests could not be confirmed during this review. Do not mark production fully verified until those checks pass.
