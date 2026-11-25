@@ -820,7 +820,8 @@ export default function App() {
     <Routes>
     <Route path="/" element={<Landing/>}/>
     <Route path="/login" element={auth.user?(<Navigate to={auth.user.role==="admin"?"/admin":auth.user.role==="teacher"?"/teacher":auth.user.role==="institution_admin"?"/institution":"/dashboard"} replace/>):<AuthPage mode="login" auth={auth}/>}/>
-    <Route path="/register" element={auth.user?<Navigate to="/dashboard" replace/>:<AuthPage mode="register" auth={auth}/>}/>\n    <Route path="/verify-email" element={<VerifyEmailPage/>}/>
+    <Route path="/register" element={auth.user?<Navigate to="/dashboard" replace/>:<AuthPage mode="register" auth={auth}/>}/>
+    <Route path="/verify-email" element={<VerifyEmailPage/>}/>
     <Route path="/admin/login" element={auth.user?(<Navigate to={auth.user.role==="admin"?"/admin":"/dashboard"} replace/>):<AuthPage mode="admin" auth={auth}/>}/>
     <Route path="/dashboard" element={<Protected auth={auth}><Dashboard/></Protected>}/>
     <Route path="/growth-lab" element={<Protected auth={auth} roles={["student"]}><AcademicGrowthHub/></Protected>}/>
