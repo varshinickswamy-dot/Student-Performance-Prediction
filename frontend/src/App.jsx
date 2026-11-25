@@ -275,7 +275,7 @@ function Dashboard() {
   useEffect(()=>{loadDashboard();},[]);
 
   if(loading&&!data) return <div className="loading-page" role="status"><span className="spinner"/>Loading your academic overview...</div>;
-  if(error&&!data) return <section className="empty-state dashboard-error" role="alert"><div className="empty-icon"><AlertCircle/></div><h2>We couldn't load your dashboard</h2><p>{error}</p><button className="button primary" type="button" onClick={loadDashboard}>Try again</button></section>;
+  if(error&&!data) return <section className="empty-state dashboard-error" role="alert"><div className="empty-icon"><ShieldAlert/></div><h2>We couldn't load your dashboard</h2><p>{error}</p><button className="button primary" type="button" onClick={loadDashboard}>Try again</button></section>;
   if(!data) return null;
 
   const hasPredictions=Number(data.total_assessments)>0;
