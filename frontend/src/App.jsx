@@ -244,7 +244,7 @@ function VerifyEmailPage() {
         {status && <div className="alert" role="status">{status}</div>}
         {error && <div className="alert" role="alert">{error}</div>}
         {loading && <p className="muted">Please wait while we verify your link…</p>}
-        {!token && <form onSubmit={resend}>
+        {(!token || error) && <form onSubmit={resend}>
           <p className="muted">We sent a verification link to the email address you registered with. The link expires after 30 minutes.</p>
           <label>Email Address<input type="email" value={email} onChange={e=>setEmail(e.target.value)} required /></label>
           <button className="button primary full" disabled={resent}> {resent ? "Request sent" : "Resend verification email"} </button>
