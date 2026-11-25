@@ -583,15 +583,45 @@ function PredictionDetail() {
 
 function Analytics() {
   const [trends,setTrends]=useState([]),[subjects,setSubjects]=useState([]),[heatmap,setHeatmap]=useState([]),[semesters,setSemesters]=useState([]);
-  useEffect(()=>{Promise.all([
-    api.get("/api/analytics/trends"),api.get("/api/analytics/subjects"),
-    api.get("/api/analytics/heatmap"),api.get("/api/analytics/semester-comparison"),
-  ]).then(([t,s,h,sem])=>{setTrends(t.data);setSubjects(s.data);setHeatmap(h.data);setSemesters(sem.data)}).catch(reportApiError)},[]);
-  return <><div className="page-heading"><div><span>Insights</span><h1>Academic analytics</h1></div></div>
-    <div className="chart-grid"><article className="panel"><h3>Study hours versus model estimate</h3><ResponsiveContainer width="100%" height={300}><BarChart data={trends}><CartesianGrid strokeDasharray="3 3"/><XAxis dataKey="study_hours"/><YAxis/><Tooltip/><Legend/><Bar dataKey="score" fill="#7566F1" name="Model estimate"/></BarChart></ResponsiveContainer></article><article className="panel"><h3>Attendance and model estimate</h3><ResponsiveContainer width="100%" height={300}><AreaChart data={trends}><CartesianGrid strokeDasharray="3 3"/><XAxis dataKey="attendance"/><YAxis/><Tooltip/><Area dataKey="score" stroke="#A78BFA" fill="#A78BFA" fillOpacity={.2}/></AreaChart></ResponsiveContainer></article></div>
-    <article className="panel"><h3>Subject comparison</h3>{subjects.length?<ResponsiveContainer width="100%" height={280}><BarChart data={subjects}><CartesianGrid strokeDasharray="3 3"/><XAxis dataKey="subject"/><YAxis domain={[0,100]}/><Tooltip/><Bar dataKey="score" fill="#7566F1" name="Average model estimate"/></BarChart></ResponsiveContainer>:<p className="muted">Create predictions for more subjects to compare them.</p>}</article>
-    <article className="panel"><h3>Subject × semester heatmap</h3><p className="muted">Tiles show the average saved model estimate for each subject and semester.</p>{heatmap.length?<div className="heatmap-grid">{heatmap.map(item=><div className="heatmap-tile" key={`${item.subject}-${item.semester}`} style={{background:`color-mix(in srgb,var(--success) ${item.average_model_estimate}%,var(--card))`}}><strong>{item.average_model_estimate}</strong><span>{item.subject}</span><small>Semester {item.semester} · {item.assessment_count} assessment(s)</small></div>)}</div>:<p className="muted">No subject-semester records available yet.</p>}</article>
+  const [loading,setLoading]=useState(true),[error,setError]=useState("");
+  const load=async()=>{
+    setLoading(true);setError("");
+    const results=await Promise.allSettled([
+      api.get("/api/analytics/trends"),api.get("/api/analytics/subjects"),
+      api.get("/api/analytics/heatmap"),api.get("/api/analytics/semester-comparison")
+    ]);
+    const setters=[setTrends,setSubjects,setHeatmap,setSemesters];
+    let failed=0;
+    results.forEach((result,index)=>{
+      if(result.status==="fulfilled") setters[index](Array.isArray(result.value.data)?result.value.data:[]);
+      else { setters[index]([]);failed+=1; }
+    });
+    if(failed===4)setError("Analytics could not be loaded. Check your connection and try again.");
+    else if(failed>0)setError("Some analytics sections are temporarily unavailable. Available insights are shown below.");
+    setLoading(false);
+  };
+  useEffect(()=>{load();},[]);
+  const average=trends.length?trends.reduce((sum,item)=>sum+Number(item.score||0),0)/trends.length:null;
+  const latest=trends.length?trends[trends.length-1]:null;
+  const totalAssessments=semesters.reduce((sum,item)=>sum+Number(item.assessment_count||0),0);
+  if(loading)return <div className="loading-page" role="status"><span className="spinner"/>Loading your academic insights...</div>;
+  return <>
+    <div className="page-heading"><div><span>Insights</span><h1>Academic analytics</h1><p className="muted">Explore your saved model estimates across subjects and semesters.</p></div><button className="button ghost" type="button" onClick={load}>Refresh insights</button></div>
+    {error&&<div className="alert" role="status">{error}{totalAssessments===0&&<button className="button ghost" type="button" onClick={load}>Retry</button>}</div>}
+    <div className="analytics-summary-grid">
+      <article className="stat-card"><span>Saved assessments</span><strong>{trends.length}</strong><small>Predictions in your history</small></article>
+      <article className="stat-card"><span>Average model estimate</span><strong>{average===null?"—":`${average.toFixed(1)}%`}</strong><small>Across available saved records</small></article>
+      <article className="stat-card"><span>Latest model estimate</span><strong>{latest? `${latest.score}%`:"—"}</strong><small>{latest?.date||"No saved predictions yet"}</small></article>
+      <article className="stat-card"><span>Subjects tracked</span><strong>{subjects.length}</strong><small>With saved assessments</small></article>
+    </div>
+    <div className="chart-grid">
+      <article className="panel"><h3>Saved model estimates over time</h3><p className="muted">Each point is a stored prediction, not an observed exam result.</p>{trends.length?<ResponsiveContainer width="100%" height={280}><AreaChart data={trends}><CartesianGrid strokeDasharray="3 3"/><XAxis dataKey="date"/><YAxis domain={[0,100]}/><Tooltip/><Area type="monotone" dataKey="score" stroke="#7566F1" fill="#7566F1" fillOpacity={.18} name="Model estimate"/></AreaChart></ResponsiveContainer>:<div className="chart-empty"><Activity/><strong>No saved assessments yet</strong><span>Create a prediction to start building your personal analytics.</span><Link className="button primary" to="/predict">Create prediction</Link></div>}</article>
+      <article className="panel"><h3>Study hours and model estimates</h3><p className="muted">Descriptive comparison only; it does not establish cause and effect.</p>{trends.length?<ResponsiveContainer width="100%" height={280}><ScatterChart><CartesianGrid strokeDasharray="3 3"/><XAxis type="number" dataKey="study_hours" name="Study hours" unit="h"/><YAxis type="number" dataKey="score" name="Model estimate" unit="%" domain={[0,100]}/><Tooltip cursor={{strokeDasharray:"3 3"}}/><Scatter data={trends} fill="#7566F1"/></ScatterChart></ResponsiveContainer>:<div className="chart-empty"><Activity/><strong>More data needed</strong><span>Study-hour comparisons appear after you save predictions.</span></div>}</article>
+    </div>
+    <article className="panel"><h3>Subject comparison</h3>{subjects.length?<ResponsiveContainer width="100%" height={280}><BarChart data={subjects}><CartesianGrid strokeDasharray="3 3"/><XAxis dataKey="subject"/><YAxis domain={[0,100]}/><Tooltip/><Bar dataKey="score" fill="#7566F1" name="Average model estimate" radius={[6,6,0,0]}/></BarChart></ResponsiveContainer>:<p className="muted">Create predictions for more subjects to compare them.</p>}</article>
+    <article className="panel"><h3>Subject × semester heatmap</h3><p className="muted">Tiles show the average saved model estimate for each subject and semester.</p>{heatmap.length?<div className="heatmap-grid">{heatmap.map(item=><div className="heatmap-tile" key={`${item.subject}-${item.semester}`} style={{background:`color-mix(in srgb,var(--success) ${Math.max(0,Math.min(100,Number(item.average_model_estimate)||0))}%,var(--card))`}}><strong>{item.average_model_estimate}%</strong><span>{item.subject}</span><small>Semester {item.semester} · {item.assessment_count} assessment(s)</small></div>)}</div>:<p className="muted">No subject-semester records available yet.</p>}</article>
     <article className="panel"><h3>Semester comparison</h3>{semesters.length?<div className="table-wrap"><table><thead><tr><th>Semester</th><th>Average model estimate</th><th>Assessments</th></tr></thead><tbody>{semesters.map(item=><tr key={item.semester}><td>{item.semester}</td><td><strong>{item.average_model_estimate}%</strong></td><td>{item.assessment_count}</td></tr>)}</tbody></table></div>:<p className="muted">Create assessments in different semesters to compare them.</p>}</article>
+    <p className="analytics-disclaimer">Important: these charts summarize model-generated estimates from your saved inputs. They are not verified academic results, causal evidence, or a basis for grading or other high-impact decisions.</p>
   </>;
 }
 
