@@ -41,3 +41,13 @@
 - Career skill-map percentages and scholarship pathways are exploratory, not hiring probabilities or verified eligibility.
 - Student-entered activity is self-reported, not official institutional data.
 - A published URL alone does not prove current service health; the live smoke checks above remain outstanding.
+
+
+## Product direction update — 2026-11-25
+
+- Email verification is intentionally not part of the product. Registration remains direct and does not require Resend configuration.
+- Removed the experimental email-verification API, database model, UI page, tests, and deployment instructions.
+- Refreshed the visual system with clearer surface hierarchy, refined dark/light palettes, responsive spacing, stronger focus states, hover feedback, and reduced-motion support.
+- Theme selection now respects the operating-system preference on first visit, persists the user's explicit choice, and exposes an accessible toggle label.
+- The same theme switch remains available on public pages and authenticated workspaces.
+- Remaining release work: verify the Vercel deployment, test the public landing/auth flows on mobile and desktop, and run role-based smoke tests against the deployed backend.
