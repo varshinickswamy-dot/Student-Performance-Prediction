@@ -171,6 +171,10 @@ function AuthPage({ mode, auth }) {
       } else if (mode === "register") {
         if (form.password !== form.confirm_password) throw new Error("Passwords do not match");
         const res = await api.post("/api/auth/register",form);
+        if (res.data.verification_required) {
+          navigate(`/verify-email?email=${encodeURIComponent(res.data.email)}`);
+          return;
+        }
         auth.login(res.data.access_token,res.data.user); navigate("/dashboard");
       } else {
         const res = await api.post("/api/auth/login",{email:form.email,password:form.password});
