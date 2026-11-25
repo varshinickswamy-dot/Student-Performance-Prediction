@@ -11,7 +11,7 @@ EduPredict is a full-stack academic analytics application for student performanc
 ## Features
 
 - Premium responsive public website with dark and light themes
-- Registration with production email verification, expiring single-use links and resend cooldown; login, protected student routes, and JWT sessions
+- Student registration and login, protected student routes, and JWT sessions
 - Demonstration Ridge regression model with persisted Joblib artifact
 - Prediction history, delete protection, analytics, and transparent recommendations
 - Authenticated model explanations using additive Ridge coefficient contributions
