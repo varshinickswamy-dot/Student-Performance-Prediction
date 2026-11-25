@@ -15,7 +15,8 @@ from app.schemas import (
     LoginRequest, PredictionInput, PredictionResponse, ProfileUpdate,
     RegisterRequest, PredictionSimulationInput, TokenResponse, UserResponse,
     StudyGoalCreate, StudyGoalUpdate, StudyPlanRequest, AssistantQuestion,
-    TeacherCreate, TeacherAssignmentCreate, InterventionNoteCreate, AcademicActivityCreate,\n    EmailVerificationRequest, EmailResendRequest,
+    TeacherCreate, TeacherAssignmentCreate, InterventionNoteCreate, AcademicActivityCreate,
+    EmailVerificationRequest, EmailResendRequest,
 )
 from app.core.security import (
     JWT_ALGORITHM, JWT_SECRET_KEY, create_access_token,
