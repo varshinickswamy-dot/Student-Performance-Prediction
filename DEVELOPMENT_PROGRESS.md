@@ -61,7 +61,7 @@
 - Empty chart states explain how additional assessments unlock insights.
 - Zero-valued scores and attendance are rendered as valid values rather than missing data.
 - Prediction history includes a clear empty state.
-- These dashboard reliability improvements are submitted in PR #11 and are pending CI review/merge.
+- These dashboard reliability improvements were merged through PR #11 after CI passed.
 
 
 ## Study planner UX update — 2026-11-25
@@ -70,4 +70,16 @@
 - Added overall weekly completion percentage and completed/total activity counts.
 - Added per-day completion counts and clearer subject/task grouping.
 - Completion is intentionally session-scoped for now; it resets when a new plan is generated or the page session is restarted. Persistent server-side task completion is a future enhancement and is not claimed as implemented.
-- This update is submitted in PR #12 and requires CI and production verification.
+- This update was merged through PR #12 after CI passed. Production verification remains outstanding.
+
+
+## Academic analytics UX update — 2026-11-25
+
+- Added summary metrics for saved assessments, average model estimate, latest model estimate, and tracked subjects.
+- Replaced the study-hours bar chart with a scatter plot to communicate the relationship as a descriptive comparison rather than implying categories.
+- Added date-based saved model-estimate trend visualization and clearer chart explanations.
+- Analytics requests now load independently; partial endpoint failures no longer blank the entire page.
+- Added loading, retry, and empty states.
+- Added an explicit responsible-use note: charts represent model-generated estimates, not verified academic results or causal evidence.
+- Uses existing analytics API routes; no backend schema or endpoint changes.
+- Pending CI and merge in PR #13; production deployment remains to be verified.
