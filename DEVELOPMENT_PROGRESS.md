@@ -12,11 +12,11 @@
 - Teacher and institution workspaces with assignment/institution scoping and small-cohort suppression.
 - System administration, teacher provisioning, student assignments, audit logs and model monitoring.
 - Separate optional final-exam candidate endpoint and UI; it fails closed when the candidate artifact is not configured and does not replace the baseline model.
-- Backend pytest suite and GitHub Actions workflow for backend tests and frontend production build.
+- Backend pytest suite and GitHub Actions workflow for backend tests and frontend production build.\n- Production email-verification workflow for new student registrations using Resend, with expiring one-time tokens, resend throttling and login gating; legacy accounts and staff provisioned by administrators remain compatible.
 - Deployment, API, architecture, ML methodology, dataset benchmark and feature documentation.
 - README includes published frontend, backend health and API documentation links.
 
-## Latest documentation maintenance
+## Latest documentation maintenance\n\n- Added a production-only email-verification flow for new student registrations. Verification tokens are hashed at rest, expire after 30 minutes, and can be reissued with a 60-second cooldown. Existing accounts without verification records are not locked out.\n
 
 - Clarified local-only administrator setup and removed public default credential instructions.
 - Corrected escaped newline formatting in README feature bullets.
@@ -29,7 +29,7 @@
 2. Confirm the Render PostgreSQL database is persistent and that existing records remain intact.
 3. Verify `/api/health/ready` returns ready; then test registration, login, prediction, history, and CORS from the published Vercel site.
 4. Confirm Vercel uses the correct `VITE_API_BASE_URL` and redeploys the latest main branch.
-5. Configure password-reset email delivery only if that feature is required; otherwise keep the honest unavailable response.
+5. Configure `RESEND_API_KEY` and a verified-domain `EMAIL_FROM` sender in Render; test new registration, inbox delivery, verification, expired-link handling, resend throttling and login gating. Password reset remains a separate workflow and is not enabled by email verification.
 6. Supply an authorised, documented real student dataset before attempting real-world model evaluation. The current model is synthetic demonstration data only.
 7. Keep the final-exam candidate optional unless its artifact is securely hosted and reviewed. Do not commit private CSVs or Joblib artifacts.
 8. Run the CI workflow and resolve any failing checks before declaring release complete.
