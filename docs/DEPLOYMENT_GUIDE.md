@@ -75,3 +75,16 @@ Teacher and institution workflows:
 The assistant works without an external provider using a contextual built-in fallback. To enable an OpenAI-compatible provider, configure `AI_API_KEY`, `AI_MODEL`, and optionally `AI_API_BASE_URL` as Render environment variables. Keep the key server-side only; production provider URLs must use HTTPS. If these values are not configured or the provider is unavailable, the built-in fallback remains active. The student-facing assistant requires a separate explicit consent checkbox for each request before any external call. Only the question and limited academic context are sent; the student's name and account ID are excluded. Review the provider's data handling and applicable notice/consent requirements before enabling it.
 
 The academic support assessment uses explicit rules and recorded model estimates. It returns support points, not calibrated probabilities. Student-entered activity logs are self-reported and must not be treated as official attendance or institutional grade records.
+
+
+## Production email verification
+
+New student registrations in production require email verification before login. Configure these Render environment variables:
+
+- `RESEND_API_KEY`: the API key from your Resend account (keep it secret).
+- `EMAIL_FROM`: a sender identity on a domain verified in Resend, for example `EduPredict <no-reply@your-verified-domain.com>`.
+- `FRONTEND_URL`: include the exact published Vercel origin used by the user. The first comma-separated origin is used to build verification links.
+
+After saving the variables, redeploy the Render backend. Test with a new email address: registration should show a verification message, the email link should open `/verify-email`, and login should be rejected until the link is used. Verification links are single-use and expire after 30 minutes. Resend requests have a 60-second cooldown.
+
+Existing accounts that predate this feature and staff accounts provisioned by the administrator are not retroactively blocked. Password reset remains a separate feature and is not enabled by this verification workflow. Never commit API keys or paste them into GitHub.
