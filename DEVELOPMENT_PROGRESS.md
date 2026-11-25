@@ -62,3 +62,12 @@
 - Zero-valued scores and attendance are rendered as valid values rather than missing data.
 - Prediction history includes a clear empty state.
 - These dashboard reliability improvements are submitted in PR #11 and are pending CI review/merge.
+
+
+## Study planner UX update — 2026-11-25
+
+- Added interactive completion checkboxes for each generated weekly study activity.
+- Added overall weekly completion percentage and completed/total activity counts.
+- Added per-day completion counts and clearer subject/task grouping.
+- Completion is intentionally session-scoped for now; it resets when a new plan is generated or the page session is restarted. Persistent server-side task completion is a future enhancement and is not claimed as implemented.
+- This update is submitted in PR #12 and requires CI and production verification.
