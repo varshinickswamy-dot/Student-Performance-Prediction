@@ -612,3 +612,88 @@ def test_extended_student_growth_lab_endpoints():
     # Student accounts cannot access staff-only intelligence endpoints.
     assert client.get("/api/teacher/intelligence", headers=headers).status_code == 403
     assert client.get("/api/institution/intelligence", headers=headers).status_code == 403
+
+
+
+def test_production_registration_requires_email_verification(monkeypatch):
+    monkeypatch.setenv("ENVIRONMENT", "production")
+    monkeypatch.setenv("RESEND_API_KEY", "re_test_key")
+    monkeypatch.setenv("EMAIL_FROM", "EduPredict <verify@example.com>")
+    captured = {}
+    monkeypatch.setattr(
+        api_module, "_send_verification_email",
+        lambda user, raw_token: captured.update({"email": user.email, "token": raw_token}),
+    )
+
+    registration = client.post("/api/auth/register", json={
+        "full_name": "Verification Student",
+        "email": "verification-student@example.com",
+        "password": "StrongPassword123",
+        "confirm_password": "StrongPassword123",
+    })
+    assert registration.status_code == 201
+    assert registration.json()["verification_required"] is True
+    assert registration.json()["email"] == "verification-student@example.com"
+    assert "access_token" not in registration.json()
+    assert captured["email"] == "verification-student@example.com"
+
+    login = client.post("/api/auth/login", json={
+        "email": "verification-student@example.com",
+        "password": "StrongPassword123",
+    })
+    assert login.status_code == 403
+    assert "verify your email" in login.json()["detail"].lower()
+
+    verified = client.post("/api/auth/verify-email", json={"token": captured["token"]})
+    assert verified.status_code == 200
+    assert verified.json()["verified"] is True
+
+    login_after_verification = client.post("/api/auth/login", json={
+        "email": "verification-student@example.com",
+        "password": "StrongPassword123",
+    })
+    assert login_after_verification.status_code == 200
+    assert login_after_verification.json()["access_token"]
+
+
+def test_verification_link_is_one_time_and_resend_is_throttled(monkeypatch):
+    monkeypatch.setenv("ENVIRONMENT", "production")
+    monkeypatch.setenv("RESEND_API_KEY", "re_test_key")
+    monkeypatch.setenv("EMAIL_FROM", "EduPredict <verify@example.com>")
+    issued = []
+    monkeypatch.setattr(
+        api_module, "_send_verification_email",
+        lambda user, raw_token: issued.append(raw_token),
+    )
+    registration = client.post("/api/auth/register", json={
+        "full_name": "Resend Student",
+        "email": "resend-student@example.com",
+        "password": "StrongPassword123",
+        "confirm_password": "StrongPassword123",
+    })
+    assert registration.status_code == 201
+    first_token = issued[-1]
+
+    resend = client.post("/api/auth/verification/resend", json={
+        "email": "resend-student@example.com",
+    })
+    assert resend.status_code == 200
+    assert len(issued) == 1  # 60-second cooldown prevents immediate repeat sends.
+
+    verified = client.post("/api/auth/verify-email", json={"token": first_token})
+    assert verified.status_code == 200
+    reused = client.post("/api/auth/verify-email", json={"token": first_token})
+    assert reused.status_code == 400
+
+
+def test_production_registration_fails_closed_without_email_configuration(monkeypatch):
+    monkeypatch.setenv("ENVIRONMENT", "production")
+    monkeypatch.delenv("RESEND_API_KEY", raising=False)
+    monkeypatch.delenv("EMAIL_FROM", raising=False)
+    response = client.post("/api/auth/register", json={
+        "full_name": "No Mail Student",
+        "email": "no-mail-student@example.com",
+        "password": "StrongPassword123",
+        "confirm_password": "StrongPassword123",
+    })
+    assert response.status_code == 503
