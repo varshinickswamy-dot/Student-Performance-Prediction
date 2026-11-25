@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { Link, Navigate, Route, Routes, useNavigate, useParams } from "react-router-dom";
+import { Link, Navigate, Route, Routes, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import {
   Activity, BarChart3, BookOpen, ChevronRight, GraduationCap, History,
   LayoutDashboard, LogOut, Menu, Moon, ShieldCheck, Sun, Target,
@@ -201,6 +201,55 @@ function AuthPage({ mode, auth }) {
         {mode==="login" && <p className="auth-switch">New to EduPredict? <Link to="/register">Create an account</Link></p>}
         {mode==="register" && <p className="auth-switch">Already registered? <Link to="/login">Sign in</Link></p>}
         {mode==="admin" && <p className="auth-switch"><Link to="/login">Student login</Link></p>}
+      </div>
+    </div>
+  );
+}
+
+function VerifyEmailPage() {
+  const [params] = useSearchParams();
+  const token = params.get("token");
+  const emailFromUrl = params.get("email") || "";
+  const [email,setEmail] = useState(emailFromUrl);
+  const [status,setStatus] = useState(token ? "Verifying your email address…" : "Check your inbox for the verification link.");
+  const [error,setError] = useState("");
+  const [loading,setLoading] = useState(Boolean(token));
+  const [resent,setResent] = useState(false);
+
+  useEffect(() => {
+    if (!token) return;
+    let active = true;
+    api.post("/api/auth/verify-email",{token})
+      .then(() => { if(active) setStatus("Your email is verified. You can now sign in."); })
+      .catch(err => { if(active) setError(getApiErrorMessage(err)); })
+      .finally(() => { if(active) setLoading(false); });
+    return () => { active = false; };
+  }, [token]);
+
+  const resend = async (event) => {
+    event.preventDefault();
+    setError("");
+    try {
+      const response = await api.post("/api/auth/verification/resend",{email});
+      setStatus(response.data.message || "If the account needs verification, an email has been sent.");
+      setResent(true);
+    } catch (err) { setError(getApiErrorMessage(err)); }
+  };
+
+  return (
+    <div className="auth-page">
+      <Link className="brand auth-brand" to="/"><span className="brand-mark"><GraduationCap /></span><span>EduPredict</span></Link>
+      <div className="auth-card">
+        <div className="auth-heading"><span>Account security</span><h1>Verify your email</h1></div>
+        {status && <div className="alert" role="status">{status}</div>}
+        {error && <div className="alert" role="alert">{error}</div>}
+        {loading && <p className="muted">Please wait while we verify your link…</p>}
+        {!token && <form onSubmit={resend}>
+          <p className="muted">We sent a verification link to the email address you registered with. The link expires after 30 minutes.</p>
+          <label>Email Address<input type="email" value={email} onChange={e=>setEmail(e.target.value)} required /></label>
+          <button className="button primary full" disabled={resent}> {resent ? "Request sent" : "Resend verification email"} </button>
+        </form>}
+        <p className="auth-switch"><Link to="/login">Continue to sign in</Link></p>
       </div>
     </div>
   );
@@ -771,7 +820,7 @@ export default function App() {
     <Routes>
     <Route path="/" element={<Landing/>}/>
     <Route path="/login" element={auth.user?(<Navigate to={auth.user.role==="admin"?"/admin":auth.user.role==="teacher"?"/teacher":auth.user.role==="institution_admin"?"/institution":"/dashboard"} replace/>):<AuthPage mode="login" auth={auth}/>}/>
-    <Route path="/register" element={auth.user?<Navigate to="/dashboard" replace/>:<AuthPage mode="register" auth={auth}/>}/>
+    <Route path="/register" element={auth.user?<Navigate to="/dashboard" replace/>:<AuthPage mode="register" auth={auth}/>}/>\n    <Route path="/verify-email" element={<VerifyEmailPage/>}/>
     <Route path="/admin/login" element={auth.user?(<Navigate to={auth.user.role==="admin"?"/admin":"/dashboard"} replace/>):<AuthPage mode="admin" auth={auth}/>}/>
     <Route path="/dashboard" element={<Protected auth={auth}><Dashboard/></Protected>}/>
     <Route path="/growth-lab" element={<Protected auth={auth} roles={["student"]}><AcademicGrowthHub/></Protected>}/>
