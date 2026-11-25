@@ -12,11 +12,15 @@
 - Teacher and institution workspaces with assignment/institution scoping and small-cohort suppression.
 - System administration, teacher provisioning, student assignments, audit logs and model monitoring.
 - Separate optional final-exam candidate endpoint and UI; it fails closed when the candidate artifact is not configured and does not replace the baseline model.
-- Backend pytest suite and GitHub Actions workflow for backend tests and frontend production build.\n- Production email-verification workflow for new student registrations using Resend, with expiring one-time tokens, resend throttling and login gating; legacy accounts and staff provisioned by administrators remain compatible.
+- Backend pytest suite and GitHub Actions workflow for backend tests and frontend production build.
+- Production email-verification workflow for new student registrations using Resend, with expiring one-time tokens, resend throttling and login gating; legacy accounts and staff provisioned by administrators remain compatible.
 - Deployment, API, architecture, ML methodology, dataset benchmark and feature documentation.
 - README includes published frontend, backend health and API documentation links.
 
-## Latest documentation maintenance\n\n- Added a production-only email-verification flow for new student registrations. Verification tokens are hashed at rest, expire after 30 minutes, and can be reissued with a 60-second cooldown. Existing accounts without verification records are not locked out.\n
+## Latest documentation maintenance
+
+- Added a production-only email-verification flow for new student registrations. Verification tokens are hashed at rest, expire after 30 minutes, and can be reissued with a 60-second cooldown. Existing accounts without verification records are not locked out.
+
 
 - Clarified local-only administrator setup and removed public default credential instructions.
 - Corrected escaped newline formatting in README feature bullets.
