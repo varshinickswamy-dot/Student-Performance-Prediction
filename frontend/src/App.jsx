@@ -16,6 +16,18 @@ import AcademicGrowthHub from "./AcademicGrowthHub";
 import FinalExamPrediction from "./FinalExamPrediction";
 
 function useAuth() {
+  useEffect(() => {
+    const handleExpiredSession = () => {
+      localStorage.removeItem("edupredict_token");
+      localStorage.removeItem("edupredict_user");
+      sessionStorage.removeItem("edupredict_token");
+      sessionStorage.removeItem("edupredict_user");
+      setUser(null);
+    };
+    window.addEventListener("edupredict:session-expired", handleExpiredSession);
+    return () => window.removeEventListener("edupredict:session-expired", handleExpiredSession);
+  }, []);
+
   const [user, setUser] = useState(() => {
     try {
       return JSON.parse(
