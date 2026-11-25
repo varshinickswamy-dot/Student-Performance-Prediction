@@ -51,3 +51,14 @@
 - Theme selection now respects the operating-system preference on first visit, persists the user's explicit choice, and exposes an accessible toggle label.
 - The same theme switch remains available on public pages and authenticated workspaces.
 - Remaining release work: verify the Vercel deployment, test the public landing/auth flows on mobile and desktop, and run role-based smoke tests against the deployed backend.
+
+
+## Dashboard reliability update — 2026-11-25
+
+- Dashboard loading now exposes an accessible status state.
+- A failed dashboard request displays an actionable error and retry control rather than leaving the user on an indefinite spinner.
+- The core dashboard is no longer blocked when optional trend or subject analytics requests fail independently.
+- Empty chart states explain how additional assessments unlock insights.
+- Zero-valued scores and attendance are rendered as valid values rather than missing data.
+- Prediction history includes a clear empty state.
+- These dashboard reliability improvements are submitted in PR #11 and are pending CI review/merge.

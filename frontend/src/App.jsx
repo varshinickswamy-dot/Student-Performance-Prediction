@@ -246,18 +246,64 @@ function StatCards({items}) {
 }
 
 function Dashboard() {
-  const [data,setData]=useState(null); const [trends,setTrends]=useState([]); const [subjects,setSubjects]=useState([]);
-  useEffect(()=>{Promise.all([api.get("/api/student/dashboard"),api.get("/api/analytics/trends"),api.get("/api/analytics/subjects")]).then(([d,t,s])=>{setData(d.data);setTrends(t.data);setSubjects(s.data)}).catch(reportApiError)},[]);
-  if(!data) return <div className="loading-page"><span className="spinner"/>Loading dashboard...</div>;
+  const [data,setData]=useState(null);
+  const [trends,setTrends]=useState([]);
+  const [subjects,setSubjects]=useState([]);
+  const [loading,setLoading]=useState(true);
+  const [error,setError]=useState("");
+
+  const loadDashboard=async()=>{
+    setLoading(true);
+    setError("");
+    try {
+      const dashboard=await api.get("/api/student/dashboard");
+      setData(dashboard.data);
+      const [trendResult,subjectResult]=await Promise.allSettled([
+        api.get("/api/analytics/trends"),
+        api.get("/api/analytics/subjects")
+      ]);
+      setTrends(trendResult.status==="fulfilled"&&Array.isArray(trendResult.value.data)?trendResult.value.data:[]);
+      setSubjects(subjectResult.status==="fulfilled"&&Array.isArray(subjectResult.value.data)?subjectResult.value.data:[]);
+    } catch(err) {
+      setError(getApiErrorMessage(err));
+      reportApiError(err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(()=>{loadDashboard();},[]);
+
+  if(loading&&!data) return <div className="loading-page" role="status"><span className="spinner"/>Loading your academic overview...</div>;
+  if(error&&!data) return <section className="empty-state dashboard-error" role="alert"><div className="empty-icon"><ShieldAlert/></div><h2>We couldn't load your dashboard</h2><p>{error}</p><button className="button primary" type="button" onClick={loadDashboard}>Try again</button></section>;
+  if(!data) return null;
+
+  const hasPredictions=Number(data.total_assessments)>0;
+  const latestScore=data.latest_predicted_score;
+  const attendance=data.attendance_percentage;
   return <>
-    <div className="page-heading"><div><span>Overview</span><h1>Welcome back, {data.welcome_name}</h1></div><Link className="button primary" to="/predict">New prediction</Link></div>
+    <div className="page-heading"><div><span>Overview</span><h1>Welcome back, {data.welcome_name}</h1><p className="muted">Your academic progress, recent activity and next steps at a glance.</p></div><Link className="button primary" to="/predict">New prediction</Link></div>
     <StatCards items={[
-      [BookOpen,"Total assessments",data.total_assessments],[Target,"Latest predicted score",data.latest_predicted_score?[`${data.latest_predicted_score}%`]:null],[Activity,"Performance level",data.academic_performance_level],[TrendingUp,"Attendance",data.attendance_percentage?`${data.attendance_percentage}%`:"—"],[TrendingUp,"Improvement trend",data.improvement_trend]
+      [BookOpen,"Total assessments",data.total_assessments??0],
+      [Target,"Latest predicted score",latestScore!==null&&latestScore!==undefined?`${latestScore}%`:"—"],
+      [Activity,"Performance level",data.academic_performance_level||"Not assessed"],
+      [TrendingUp,"Attendance",attendance!==null&&attendance!==undefined?`${attendance}%`:"—"],
+      [TrendingUp,"Improvement trend",data.improvement_trend||"Not enough data"]
     ]}/>
-    {data.total_assessments===0 ? <div className="empty-state"><div className="empty-icon"><BrainCircuit/></div><h2>Create your first prediction</h2><p>Enter your academic information to receive a transparent model estimate and personalized improvement recommendations.</p><Link className="button primary" to="/predict">Create prediction</Link></div> :
-    <><div className="chart-grid"><article className="panel"><div className="panel-heading"><div><span>Progress</span><h3>Academic performance trend</h3></div></div><ResponsiveContainer width="100%" height={260}><AreaChart data={trends}><CartesianGrid strokeDasharray="3 3"/><XAxis dataKey="date"/><YAxis domain={[0,100]}/><Tooltip/><Area type="monotone" dataKey="score" stroke="#7566F1" fill="#7566F1" fillOpacity={.18}/></AreaChart></ResponsiveContainer></article>
-    <article className="panel"><div className="panel-heading"><div><span>Subjects</span><h3>Subject-wise performance</h3></div></div><ResponsiveContainer width="100%" height={260}><BarChart data={subjects}><CartesianGrid strokeDasharray="3 3"/><XAxis dataKey="subject"/><YAxis domain={[0,100]}/><Tooltip/><Bar dataKey="score" fill="#7566F1" radius={[6,6,0,0]}/></BarChart></ResponsiveContainer></article></div>
-    <article className="panel"><div className="panel-heading"><div><span>Recent activity</span><h3>Prediction history</h3></div><Link className="text-link" to="/predictions">View all</Link></div><div className="table-wrap"><table><thead><tr><th>ID</th><th>Date</th><th>Subject</th><th>Score</th><th>Category</th></tr></thead><tbody>{data.recent_predictions.map(p=><tr key={p.id}><td>#{p.id}</td><td>{new Date(p.created_at).toLocaleDateString()}</td><td>{p.subject}</td><td><strong>{p.predicted_score}%</strong></td><td><span className="badge">{p.performance_category}</span></td></tr>)}</tbody></table></div></article></>}
+    {!hasPredictions ? <div className="empty-state"><div className="empty-icon"><BrainCircuit/></div><h2>Your learning journey starts here</h2><p>Create your first assessment to unlock performance insights, subject trends and personalized recommendations. Your dashboard will grow as you add assessments.</p><div className="hero-actions"><Link className="button primary" to="/predict">Create first prediction</Link><Link className="button ghost" to="/study-plan">Build a study plan</Link></div></div> :
+    <>
+      <div className="chart-grid">
+        <article className="panel"><div className="panel-heading"><div><span>Progress</span><h3>Academic performance trend</h3></div></div>
+          {trends.length ? <ResponsiveContainer width="100%" height={260}><AreaChart data={trends}><CartesianGrid strokeDasharray="3 3"/><XAxis dataKey="date"/><YAxis domain={[0,100]}/><Tooltip/><Area type="monotone" dataKey="score" stroke="#7566F1" fill="#7566F1" fillOpacity={.18}/></AreaChart></ResponsiveContainer> : <div className="chart-empty"><Activity/><strong>Trend data will appear here</strong><span>Add more assessments to see how your scores change over time.</span></div>}
+        </article>
+        <article className="panel"><div className="panel-heading"><div><span>Subjects</span><h3>Subject-wise performance</h3></div></div>
+          {subjects.length ? <ResponsiveContainer width="100%" height={260}><BarChart data={subjects}><CartesianGrid strokeDasharray="3 3"/><XAxis dataKey="subject"/><YAxis domain={[0,100]}/><Tooltip/><Bar dataKey="score" fill="#7566F1" radius={[6,6,0,0]}/></BarChart></ResponsiveContainer> : <div className="chart-empty"><BookOpen/><strong>No subject comparison yet</strong><span>Subject-level insights will appear when enough assessment data is available.</span></div>}
+        </article>
+      </div>
+      <article className="panel"><div className="panel-heading"><div><span>Recent activity</span><h3>Prediction history</h3></div><Link className="text-link" to="/predictions">View all</Link></div>
+        {data.recent_predictions?.length ? <div className="table-wrap"><table><thead><tr><th>ID</th><th>Date</th><th>Subject</th><th>Score</th><th>Category</th></tr></thead><tbody>{data.recent_predictions.map(p=><tr key={p.id}><td>#{p.id}</td><td>{new Date(p.created_at).toLocaleDateString()}</td><td>{p.subject}</td><td><strong>{p.predicted_score}%</strong></td><td><span className="badge">{p.performance_category}</span></td></tr>)}</tbody></table></div> : <p className="muted">No recent predictions yet.</p>}
+      </article>
+    </>}
   </>;
 }
 
