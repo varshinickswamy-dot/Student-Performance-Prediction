@@ -46,13 +46,19 @@ function useAuth() {
 }
 
 function ThemeToggle() {
-  const [theme, setTheme] = useState(() => localStorage.getItem("edupredict_theme") || "dark");
+  const [theme, setTheme] = useState(() => {
+    const saved = localStorage.getItem("edupredict_theme");
+    if (saved === "light" || saved === "dark") return saved;
+    return window.matchMedia?.("(prefers-color-scheme: light)").matches ? "light" : "dark";
+  });
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
+    document.documentElement.style.colorScheme = theme;
     localStorage.setItem("edupredict_theme", theme);
   }, [theme]);
+  const nextTheme = theme === "dark" ? "light" : "dark";
   return (
-    <button className="icon-button" aria-label="Toggle theme" onClick={() => setTheme(theme === "dark" ? "light" : "dark")}>
+    <button className="icon-button" type="button" aria-label={`Switch to ${nextTheme} theme`} aria-pressed={theme === "dark"} title={`Switch to ${nextTheme} theme`} onClick={() => setTheme(nextTheme)}>
       {theme === "dark" ? <Sun size={18} /> : <Moon size={18} />}
     </button>
   );
