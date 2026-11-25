@@ -28,7 +28,7 @@ Start command:
 uvicorn app.main:app --host 0.0.0.0 --port $PORT
 ```
 
-Set `DATABASE_URL`, `JWT_SECRET_KEY`, `ADMIN_USERNAME`, `ADMIN_PASSWORD`, and `FRONTEND_URL=https://student-performance-prediction-amber.vercel.app`. Use a persistent PostgreSQL database for production.
+Set `DATABASE_URL`, `JWT_SECRET_KEY`, `ADMIN_USERNAME`, `ADMIN_PASSWORD`, `FRONTEND_URL`, and `ENVIRONMENT=production`. `FRONTEND_URL` should contain every active frontend origin, comma-separated (for example `https://student-performance-prediction-amber.vercel.app,https://varshinickswamy-dots-projects.vercel.app`). Use a persistent PostgreSQL database for production. Generate a unique, high-entropy JWT secret and a strong non-default administrator password; never copy local demo credentials into production.
 
 
 ## Health and readiness checks
@@ -37,7 +37,7 @@ Set `DATABASE_URL`, `JWT_SECRET_KEY`, `ADMIN_USERNAME`, `ADMIN_PASSWORD`, and `F
 - `GET /api/health/live` confirms that the process can answer requests.
 - `GET /api/health/ready` checks both the configured database connection and the persisted/trained ML pipeline. It returns HTTP 503 if either dependency is unavailable.
 
-After a backend deployment, verify both the existing health endpoint and readiness endpoint. Do not treat a successful liveness response alone as proof that PostgreSQL is connected.
+After a backend deployment, verify `/api/health`, `/api/health/live`, and `/api/health/ready`. Do not treat a successful liveness response alone as proof that PostgreSQL and the model are ready. Also test registration, login, a protected prediction, history ownership, and the frontend-to-backend CORS preflight from the published domain.
 
 ## Prediction explainability and what-if API
 

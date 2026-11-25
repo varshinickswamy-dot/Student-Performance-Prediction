@@ -7,12 +7,18 @@ on:
       - "backend/**"
       - "tests/**"
       - "frontend/**"
+      - "docs/**"
+      - "README.md"
+      - "DEVELOPMENT_PROGRESS.md"
       - ".github/workflows/backend-tests.yml"
   pull_request:
     paths:
       - "backend/**"
       - "tests/**"
       - "frontend/**"
+      - "docs/**"
+      - "README.md"
+      - "DEVELOPMENT_PROGRESS.md"
       - ".github/workflows/backend-tests.yml"
 
 jobs:
@@ -35,6 +41,20 @@ jobs:
         run: python -m pip install --upgrade pip && python -m pip install -r requirements.txt
       - name: Run backend tests
         run: python -m pytest tests -q
+
+  docs-sanity:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify release documentation files
+        run: |
+          test -s README.md
+          test -s DEVELOPMENT_PROGRESS.md
+          test -s docs/DEPLOYMENT_GUIDE.md
+          test -s docs/ML_METHODOLOGY.md
+          test -s docs/ACADEMIC_GROWTH_LAB.md
+          test -s docs/SYNTHETIC_DATASET_BENCHMARK.md
+          test -s docs/ANDROID_INTEGRATION.md
 
   frontend-build:
     runs-on: ubuntu-latest
