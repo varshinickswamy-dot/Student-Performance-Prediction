@@ -28,6 +28,27 @@ export function reportApiError(error) {
   return message;
 }
 
+api.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    const status = error?.response?.status;
+    const url = String(error?.config?.url || "");
+    const isPublicAuthRequest =
+      url.includes("/api/auth/login") ||
+      url.includes("/api/auth/register") ||
+      url.includes("/api/admin/login");
+
+    if (status === 401 && !isPublicAuthRequest && typeof window !== "undefined") {
+      localStorage.removeItem("edupredict_token");
+      localStorage.removeItem("edupredict_user");
+      sessionStorage.removeItem("edupredict_token");
+      sessionStorage.removeItem("edupredict_user");
+      window.dispatchEvent(new CustomEvent("edupredict:session-expired"));
+    }
+    return Promise.reject(error);
+  }
+);
+
 api.interceptors.request.use((config) => {
   const token = localStorage.getItem("edupredict_token") || sessionStorage.getItem("edupredict_token");
   if (token) config.headers.Authorization = `Bearer ${token}`;
