@@ -214,7 +214,6 @@ function VerifyEmailPage() {
   const [status,setStatus] = useState(token ? "Verifying your email address…" : "Check your inbox for the verification link.");
   const [error,setError] = useState("");
   const [loading,setLoading] = useState(Boolean(token));
-  const [resent,setResent] = useState(false);
 
   useEffect(() => {
     if (!token) return;
@@ -232,7 +231,6 @@ function VerifyEmailPage() {
     try {
       const response = await api.post("/api/auth/verification/resend",{email});
       setStatus(response.data.message || "If the account needs verification, an email has been sent.");
-      setResent(true);
     } catch (err) { setError(getApiErrorMessage(err)); }
   };
 
@@ -247,7 +245,7 @@ function VerifyEmailPage() {
         {(!token || error) && <form onSubmit={resend}>
           <p className="muted">We sent a verification link to the email address you registered with. The link expires after 30 minutes.</p>
           <label>Email Address<input type="email" value={email} onChange={e=>setEmail(e.target.value)} required /></label>
-          <button className="button primary full" disabled={resent}> {resent ? "Request sent" : "Resend verification email"} </button>
+          <button className="button primary full">Resend verification email</button>
         </form>}
         <p className="auth-switch"><Link to="/login">Continue to sign in</Link></p>
       </div>
