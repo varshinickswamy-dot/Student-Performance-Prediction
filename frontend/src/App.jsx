@@ -448,7 +448,7 @@ function PredictionDetail() {
       if(typeof value==="number")return Number.isInteger(value)?String(value):value.toFixed(2);
       return String(value);
     };
-    const prettyLabel=(key)=>String(key).replaceAll("_"," ").replace(/\\b\\w/g,char=>char.toUpperCase());
+    const prettyLabel=(key)=>String(key).replaceAll("_"," ").replace(/\b\w/g,char=>char.toUpperCase());
     const inputValue=(key,value)=>{
       if(typeof value==="boolean")return value?"Yes":"No";
       if(typeof value==="number"){
