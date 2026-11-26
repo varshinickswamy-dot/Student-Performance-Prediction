@@ -29,6 +29,11 @@ def test_health_and_model_training():
     response = client.get("/api/health")
     assert response.status_code == 200
     assert response.json()["status"] == "ok"
+
+    live = client.get("/api/health/live")
+    assert live.status_code == 200
+    assert live.json() == {"status": "alive"}
+
     ready = client.get("/api/health/ready")
     assert ready.status_code == 200
     assert ready.json()["checks"]["database"] == "available"

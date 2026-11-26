@@ -7,6 +7,7 @@ on:
       - "backend/**"
       - "tests/**"
       - "frontend/**"
+      - "scripts/**"
       - "docs/**"
       - "README.md"
       - "DEVELOPMENT_PROGRESS.md"
@@ -16,6 +17,7 @@ on:
       - "backend/**"
       - "tests/**"
       - "frontend/**"
+      - "scripts/**"
       - "docs/**"
       - "README.md"
       - "DEVELOPMENT_PROGRESS.md"
@@ -39,6 +41,8 @@ jobs:
       - name: Install backend dependencies
         working-directory: backend
         run: python -m pip install --upgrade pip && python -m pip install -r requirements.txt
+      - name: Compile backend modules
+        run: python -m compileall -q backend
       - name: Run backend tests
         run: python -m pytest tests -q
 
@@ -46,7 +50,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Verify release documentation files
+      - name: Verify release documentation and smoke-test script
         run: |
           test -s README.md
           test -s DEVELOPMENT_PROGRESS.md
@@ -55,6 +59,8 @@ jobs:
           test -s docs/ACADEMIC_GROWTH_LAB.md
           test -s docs/SYNTHETIC_DATASET_BENCHMARK.md
           test -s docs/ANDROID_INTEGRATION.md
+          test -s scripts/production_smoke.py
+          python -m py_compile scripts/production_smoke.py
 
   frontend-build:
     runs-on: ubuntu-latest
@@ -63,9 +69,11 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
-      - name: Install frontend dependencies
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Install locked frontend dependencies
         working-directory: frontend
-        run: npm install
+        run: npm ci
       - name: Build production frontend
         working-directory: frontend
         env:

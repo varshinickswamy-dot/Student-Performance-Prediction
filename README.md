@@ -139,3 +139,14 @@ Every returned score is labelled as a synthetic demonstration estimate. It is no
 ## Project report
 
 The complete academic project report covers the system architecture, requirements, implementation, model methodology, limitations, testing plan, deployment and appendices. The report is maintained as a separate submission artifact; add the final reviewed PDF to the repository only if you want it publicly downloadable.
+
+
+## Production smoke checks
+
+After deployment, run the read-only production checks from the repository root:
+
+```powershell
+py -3.12 scripts/production_smoke.py
+```
+
+The script verifies the public frontend, backend liveness/readiness, and CORS preflight. It does not create or modify accounts or records. Follow the manual authenticated workflow in [the deployment guide](docs/DEPLOYMENT_GUIDE.md) before presenting the app.
