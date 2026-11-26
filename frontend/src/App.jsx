@@ -417,19 +417,9 @@ function PredictionDetail() {
   },[id]);
   const downloadReport=async()=>{
     if(!p)return;
-    // Fetch the explanation at generation time so a fast click never creates an
-    // incomplete report while the page's background explanation request is pending.
-    let reportExplanation=explanation;
-    if(!reportExplanation){
-      try{
-        const response=await api.get(`/api/predictions/${id}/explanation`);
-        reportExplanation=response.data;
-        setExplanation(response.data);
-        setExplanationError("");
-      }catch(error){
-        reportExplanation=null;
-      }
-    }
+    // Use the explanation already loaded by the page. Do not await network work here:
+    // preserving the original tap's user activation is required for mobile share/download.
+    const reportExplanation=explanation;
 
     const pdf=new jsPDF({orientation:"portrait",unit:"mm",format:"a4"});
     const pageWidth=pdf.internal.pageSize.getWidth();
