@@ -678,23 +678,40 @@ function PredictionDetail() {
 
     const filename=`edupredict-complete-report-${p.id}.pdf`;
     const reportBlob=pdf.output("blob");
-    const reportUrl=URL.createObjectURL(reportBlob);
+    const reportFile=new File([reportBlob],filename,{type:"application/pdf"});
 
     if(isMobilePdfViewer){
-      // Show the PDF in the phone's browser viewer first. The viewer's own
-      // download/share control is more reliable than an embedded WebView save.
+      // Prefer Android/iOS native sharing: users can choose Save to device,
+      // Drive, Files or another PDF-capable destination.
+      if(navigator.share&&navigator.canShare?.({files:[reportFile]})){
+        try{
+          if(reportWindow&&!reportWindow.closed)reportWindow.close();
+          await navigator.share({
+            files:[reportFile],
+            title:`EduPredict Complete Academic Report - ${p.subject}`,
+            text:`Complete academic performance report #${p.id}`,
+          });
+          return;
+        }catch(shareError){
+          if(shareError?.name==="AbortError")return;
+          console.warn("Native PDF sharing is unavailable; opening the PDF viewer instead.",shareError);
+        }
+      }
+
+      // Fallback for mobile browsers without file sharing support.
+      const reportUrl=URL.createObjectURL(reportBlob);
       if(reportWindow&&!reportWindow.closed){
         reportWindow.location.href=reportUrl;
       }else{
-        // Popup blocking fallback: open the PDF in the current browser tab.
         window.location.assign(reportUrl);
       }
-      // Keep the object URL alive while the native PDF viewer is reading it.
-      window.setTimeout(()=>URL.revokeObjectURL(reportUrl),120000);
+      // Keep the PDF URL alive long enough for mobile PDF viewers to load it.
+      window.setTimeout(()=>URL.revokeObjectURL(reportUrl),300000);
       return;
     }
 
     // Desktop browsers can use the standard download attribute.
+    const reportUrl=URL.createObjectURL(reportBlob);
     const link=document.createElement("a");
     link.href=reportUrl;
     link.download=filename;
