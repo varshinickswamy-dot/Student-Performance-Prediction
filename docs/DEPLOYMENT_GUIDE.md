@@ -75,3 +75,26 @@ Teacher and institution workflows:
 The assistant works without an external provider using a contextual built-in fallback. To enable an OpenAI-compatible provider, configure `AI_API_KEY`, `AI_MODEL`, and optionally `AI_API_BASE_URL` as Render environment variables. Keep the key server-side only; production provider URLs must use HTTPS. If these values are not configured or the provider is unavailable, the built-in fallback remains active. The student-facing assistant requires a separate explicit consent checkbox for each request before any external call. Only the question and limited academic context are sent; the student's name and account ID are excluded. Review the provider's data handling and applicable notice/consent requirements before enabling it.
 
 The academic support assessment uses explicit rules and recorded model estimates. It returns support points, not calibrated probabilities. Student-entered activity logs are self-reported and must not be treated as official attendance or institutional grade records.
+
+
+## Presentation-day production smoke test
+
+The read-only smoke script checks the published frontend, backend liveness, backend readiness (database and model), and the Vercel-origin CORS preflight. It does not create accounts, modify records, or require secrets.
+
+Run from the repository root:
+
+```powershell
+py -3.12 scripts/production_smoke.py
+```
+
+Optional overrides:
+
+```powershell
+$env:EDUPREDICT_FRONTEND_URL="https://your-active-vercel-domain"
+$env:EDUPREDICT_API_URL="https://your-render-service"
+py -3.12 scripts/production_smoke.py
+```
+
+A successful smoke test is necessary but not sufficient for release sign-off. Manually verify student registration/login, create a prediction, confirm it appears in history, download a report, and confirm a second student cannot access the first student's prediction. For staff demonstrations, use dedicated test accounts and verify each role only sees its permitted institution or assigned students. Never use real student personal data in a presentation.
+
+If readiness fails, inspect Render logs and confirm the production variables listed above. If CORS fails, add the exact Vercel origin (scheme and hostname, without a trailing path) to `FRONTEND_URL` and redeploy the backend. Do not paste secrets into logs, screenshots, GitHub issues, or chat.

@@ -93,3 +93,12 @@
 - The latest main commit reports a successful Vercel deployment status in GitHub.
 - The frontend API client defaults to the deployed Render backend in production and uses `VITE_API_BASE_URL` when configured.
 - Live Render readiness and authenticated end-to-end smoke tests could not be confirmed during this review. Do not mark production fully verified until those checks pass.
+
+
+## Presentation release hardening — 2026-11-26
+
+- Added a read-only production smoke-test script for the Vercel frontend, Render liveness/readiness, and frontend-origin CORS preflight.
+- Added an explicit liveness contract test.
+- CI now compiles backend modules, uses the locked frontend dependency installation (`npm ci`), and syntax-checks the production smoke script.
+- Expanded deployment guidance with a presentation-day manual end-to-end checklist and troubleshooting steps.
+- Remaining owner-only checks: run the production smoke script against the live services; manually test a fresh student account and the role-specific flows; confirm Render environment variables and persistent PostgreSQL configuration in the hosting dashboard. CI cannot inspect private hosting configuration or prove real-world model validity.
