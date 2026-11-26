@@ -417,6 +417,10 @@ function PredictionDetail() {
   },[id]);
   const downloadReport=async()=>{
     if(!p)return;
+    // Reserve a browser tab during the direct tap; mobile browsers may block
+    // opening a PDF viewer after asynchronous explanation loading.
+    const isMobilePdfViewer=/Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+    const reportWindow=isMobilePdfViewer?window.open("about:blank","_blank"):null;
     // Fetch the explanation at generation time so a fast click never creates an
     // incomplete report while the page's background explanation request is pending.
     let reportExplanation=explanation;
@@ -676,21 +680,45 @@ function PredictionDetail() {
     const reportBlob=pdf.output("blob");
     const reportFile=new File([reportBlob],filename,{type:"application/pdf"});
 
-    // Prefer the native share/save sheet on mobile browsers that support PDF file sharing.
-    if(navigator.share&&navigator.canShare?.({files:[reportFile]})){
-      try{
-        await navigator.share({
-          files:[reportFile],
-          title:`EduPredict Complete Academic Report - ${p.subject}`,
-          text:`Complete academic performance report #${p.id}`,
-        });
-        return;
-      }catch(shareError){
-        if(shareError?.name==="AbortError")return;
-        console.warn("Native PDF sharing failed; falling back to jsPDF save.",shareError);
+    if(isMobilePdfViewer){
+      // Prefer Android/iOS native sharing: users can choose Save to device,
+      // Drive, Files or another PDF-capable destination.
+      if(navigator.share&&navigator.canShare?.({files:[reportFile]})){
+        try{
+          if(reportWindow&&!reportWindow.closed)reportWindow.close();
+          await navigator.share({
+            files:[reportFile],
+            title:`EduPredict Complete Academic Report - ${p.subject}`,
+            text:`Complete academic performance report #${p.id}`,
+          });
+          return;
+        }catch(shareError){
+          if(shareError?.name==="AbortError")return;
+          console.warn("Native PDF sharing is unavailable; opening the PDF viewer instead.",shareError);
+        }
       }
+
+      // Fallback for mobile browsers without file sharing support.
+      const reportUrl=URL.createObjectURL(reportBlob);
+      if(reportWindow&&!reportWindow.closed){
+        reportWindow.location.href=reportUrl;
+      }else{
+        window.location.assign(reportUrl);
+      }
+      // Keep the PDF URL alive long enough for mobile PDF viewers to load it.
+      window.setTimeout(()=>URL.revokeObjectURL(reportUrl),300000);
+      return;
     }
-    pdf.save(filename);
+
+    // Desktop browsers can use the standard download attribute.
+    const reportUrl=URL.createObjectURL(reportBlob);
+    const link=document.createElement("a");
+    link.href=reportUrl;
+    link.download=filename;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.setTimeout(()=>URL.revokeObjectURL(reportUrl),60000);
   };
   const maxImpact=explanation?Math.max(...explanation.contributions.map(item=>Math.abs(item.contribution)),0.01):1;
   if(!p)return <div className="loading-page"><span className="spinner"/>Loading result...</div>;
