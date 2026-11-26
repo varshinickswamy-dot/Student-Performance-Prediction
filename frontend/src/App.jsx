@@ -417,151 +417,272 @@ function PredictionDetail() {
   },[id]);
   const downloadReport=async()=>{
     if(!p)return;
+    // Fetch the explanation at generation time so a fast click never creates an
+    // incomplete report while the page's background explanation request is pending.
+    let reportExplanation=explanation;
+    if(!reportExplanation){
+      try{
+        const response=await api.get(`/api/predictions/${id}/explanation`);
+        reportExplanation=response.data;
+        setExplanation(response.data);
+        setExplanationError("");
+      }catch(error){
+        reportExplanation=null;
+      }
+    }
+
     const pdf=new jsPDF({orientation:"portrait",unit:"mm",format:"a4"});
     const pageWidth=pdf.internal.pageSize.getWidth();
     const pageHeight=pdf.internal.pageSize.getHeight();
-    const margin=17;
+    const margin=16;
     const contentWidth=pageWidth-margin*2;
     let y=18;
+    const generatedAt=new Date();
+    let student={};
+    try{
+      student=JSON.parse(localStorage.getItem("edupredict_user")||sessionStorage.getItem("edupredict_user")||"{}")||{};
+    }catch{student={};}
+    const displayValue=(value)=>{
+      if(value===null||value===undefined||value==="")return "Not provided";
+      if(typeof value==="boolean")return value?"Yes":"No";
+      if(typeof value==="number")return Number.isInteger(value)?String(value):value.toFixed(2);
+      return String(value);
+    };
+    const prettyLabel=(key)=>String(key).replaceAll("_"," ").replace(/\\b\\w/g,char=>char.toUpperCase());
+    const inputValue=(key,value)=>{
+      if(typeof value==="boolean")return value?"Yes":"No";
+      if(typeof value==="number"){
+        if(["study_hours","sleep_hours"].includes(key))return `${displayValue(value)} hours/day`;
+        if(["previous_marks","attendance","assignment_scores","class_participation","homework_completion"].includes(key))return `${displayValue(value)}%`;
+      }
+      return displayValue(value);
+    };
     pdf.setProperties({
-      title:`EduPredict Prediction Report - ${p.subject}`,
-      subject:"Academic performance prediction",
+      title:`EduPredict Complete Academic Performance Report - ${p.subject}`,
+      subject:"Student academic performance prediction, assessment inputs and personalized recommendations",
       author:"EduPredict",
+      creator:"EduPredict Academic Performance Prediction System",
+      keywords:"EduPredict, student, academic performance, prediction, recommendations",
     });
-    pdf.setFillColor(17,24,43);
-    pdf.roundedRect(margin,y,contentWidth,31,3,3,"F");
-    pdf.setTextColor(248,250,252);
-    pdf.setFont("helvetica","bold");
-    pdf.setFontSize(18);
-    pdf.text("EduPredict",margin+7,y+11);
-    pdf.setFont("helvetica","normal");
-    pdf.setFontSize(9);
-    pdf.text("ACADEMIC PERFORMANCE FORECAST",margin+7,y+20);
-    pdf.text(`Report #${p.id}`,pageWidth-margin-7,y+11,{align:"right"});
-    y+=40;
 
+    const addPageHeader=()=>{
+      pdf.setFillColor(17,24,43);
+      pdf.rect(0,0,pageWidth,12,"F");
+      pdf.setTextColor(248,250,252);
+      pdf.setFont("helvetica","bold");
+      pdf.setFontSize(8);
+      pdf.text("EDUPREDICT  /  ACADEMIC PERFORMANCE REPORT",margin,8);
+      pdf.setTextColor(101,113,138);
+      pdf.setDrawColor(226,230,239);
+      pdf.line(margin,15,pageWidth-margin,15);
+    };
     const ensureSpace=(height)=>{
-      if(y+height>pageHeight-20){
+      if(y+height>pageHeight-21){
         pdf.addPage();
-        y=19;
+        addPageHeader();
+        y=23;
       }
     };
-    const addSection=(title)=>{
-      ensureSpace(13);
+    const addSection=(title,subtitle="")=>{
+      ensureSpace(subtitle?17:12);
       pdf.setTextColor(81,69,205);
       pdf.setFont("helvetica","bold");
       pdf.setFontSize(12);
       pdf.text(title,margin,y);
       y+=4;
-      pdf.setDrawColor(226,230,239);
+      pdf.setDrawColor(221,225,236);
       pdf.line(margin,y,pageWidth-margin,y);
-      y+=6;
+      y+=5;
+      if(subtitle){
+        pdf.setFont("helvetica","normal");
+        pdf.setFontSize(8);
+        pdf.setTextColor(101,113,138);
+        const lines=pdf.splitTextToSize(subtitle,contentWidth);
+        pdf.text(lines,margin,y);
+        y+=lines.length*3.8+2;
+      }
     };
     const addRow=(label,value)=>{
-      const wrapped=pdf.splitTextToSize(String(value),contentWidth-47);
-      const rowHeight=Math.max(6,wrapped.length*4.5);
-      ensureSpace(rowHeight+3);
-      pdf.setFontSize(9);
+      const safeValue=displayValue(value);
+      const wrapped=pdf.splitTextToSize(safeValue,contentWidth-48);
+      const rowHeight=Math.max(6,wrapped.length*4.2);
+      ensureSpace(rowHeight+2);
+      pdf.setFontSize(8.5);
       pdf.setTextColor(101,113,138);
       pdf.setFont("helvetica","bold");
-      pdf.text(label,margin,y);
+      pdf.text(String(label),margin,y);
       pdf.setTextColor(23,32,51);
       pdf.setFont("helvetica","normal");
-      pdf.text(wrapped,margin+47,y);
-      y+=rowHeight+3;
+      pdf.text(wrapped,margin+48,y);
+      y+=rowHeight+2.5;
     };
-    const addRecommendation=(recommendation)=>{
-      const actionLines=pdf.splitTextToSize(recommendation.action,contentWidth-8);
-      const benefitLines=pdf.splitTextToSize(`Benefit: ${recommendation.benefit}`,contentWidth-8);
-      const blockHeight=8+actionLines.length*4.5+benefitLines.length*4.5+6;
+    const addParagraph=(textValue,{fontSize=9,color=[71,82,105],indent=0}={})=>{
+      const lines=pdf.splitTextToSize(String(textValue||""),contentWidth-indent);
+      const height=lines.length*(fontSize*0.48)+3;
+      ensureSpace(height);
+      pdf.setFont("helvetica","normal");
+      pdf.setFontSize(fontSize);
+      pdf.setTextColor(...color);
+      pdf.text(lines,margin+indent,y);
+      y+=height;
+    };
+    const addRecommendation=(recommendation,index)=>{
+      const area=displayValue(recommendation?.area);
+      const priority=displayValue(recommendation?.priority);
+      const action=displayValue(recommendation?.action);
+      const benefit=displayValue(recommendation?.benefit);
+      const actionLines=pdf.splitTextToSize(action,contentWidth-10);
+      const benefitLines=pdf.splitTextToSize(`Expected benefit: ${benefit}`,contentWidth-10);
+      const blockHeight=12+actionLines.length*4.2+benefitLines.length*4+5;
       ensureSpace(blockHeight);
-      pdf.setDrawColor(226,230,239);
-      pdf.setFillColor(255,255,255);
+      pdf.setFillColor(249,250,253);
+      pdf.setDrawColor(225,229,239);
       pdf.roundedRect(margin,y,contentWidth,blockHeight-2,2,2,"FD");
       pdf.setFont("helvetica","bold");
-      pdf.setFontSize(10);
-      pdf.setTextColor(23,32,51);
-      pdf.text(`${recommendation.area}  |  ${recommendation.priority} priority`,margin+4,y+6);
-      pdf.setFont("helvetica","normal");
       pdf.setFontSize(9);
+      pdf.setTextColor(23,32,51);
+      pdf.text(`${index+1}. ${area}`,margin+4,y+6);
+      pdf.setFontSize(8);
+      pdf.setTextColor(81,69,205);
+      pdf.text(`${priority} PRIORITY`,pageWidth-margin-4,y+6,{align:"right"});
+      pdf.setFont("helvetica","normal");
+      pdf.setFontSize(8.5);
+      pdf.setTextColor(40,50,70);
       pdf.text(actionLines,margin+4,y+12);
       pdf.setTextColor(101,113,138);
-      pdf.text(benefitLines,margin+4,y+12+actionLines.length*4.5);
+      pdf.text(benefitLines,margin+4,y+12+actionLines.length*4.2);
       y+=blockHeight+3;
     };
 
-    pdf.setFillColor(245,246,250);
-    pdf.roundedRect(margin,y,contentWidth,33,3,3,"F");
-    pdf.setTextColor(101,113,138);
+    // Cover banner and report identity.
+    pdf.setFillColor(17,24,43);
+    pdf.roundedRect(margin,y,contentWidth,37,3,3,"F");
+    pdf.setTextColor(248,250,252);
+    pdf.setFont("helvetica","bold");
+    pdf.setFontSize(21);
+    pdf.text("EduPredict",margin+7,y+12);
     pdf.setFont("helvetica","normal");
     pdf.setFontSize(9);
-    pdf.text("PREDICTED SCORE",margin+6,y+9);
-    pdf.setTextColor(81,69,205);
-    pdf.setFont("helvetica","bold");
-    pdf.setFontSize(25);
-    pdf.text(`${p.predicted_score}/100`,margin+6,y+23);
-    pdf.setTextColor(23,32,51);
-    pdf.setFontSize(12);
-    pdf.text(p.performance_category,pageWidth-margin-6,y+18,{align:"right"});
-    pdf.setFont("helvetica","normal");
+    pdf.text("COMPLETE STUDENT PERFORMANCE REPORT",margin+7,y+20);
+    pdf.setTextColor(190,198,218);
     pdf.setFontSize(8);
-    pdf.setTextColor(101,113,138);
-    pdf.text("Model estimate - not an actual examination result",pageWidth-margin-6,y+25,{align:"right"});
-    y+=41;
+    pdf.text(`Report ID  #${p.id}`,margin+7,y+29);
+    pdf.text(`Generated  ${generatedAt.toLocaleString()}`,pageWidth-margin-7,y+29,{align:"right"});
+    y+=45;
 
-    addSection("Assessment details");
-    addRow("Subject",p.subject);
-    addRow("Semester",p.semester);
-    addRow("Prediction date",new Date(p.created_at).toLocaleString());
-    addRow("Model version",p.model_version);
+    addSection("01  Student profile","Profile information available in the signed-in EduPredict account at the time this report was generated.");
+    [
+      ["Student name",student.full_name],
+      ["Student ID",student.student_id],
+      ["Email address",student.email],
+      ["Institution",student.institution_name],
+      ["Department",student.department],
+      ["Course / programme",student.course],
+      ["Current semester",student.semester||p.semester],
+      ["Academic year",student.academic_year],
+      ["Account role",student.role],
+    ].forEach(([label,value])=>addRow(label,value));
 
-    addSection("Student inputs");
-    Object.entries(p.input_data).forEach(([key,value])=>{
-      if(key==="subject"||key==="semester")return;
-      const label=key.replaceAll("_"," ").replace(/\b\w/g,char=>char.toUpperCase());
-      addRow(label,typeof value==="boolean"?(value?"Yes":"No"):value);
+    addSection("02  Prediction overview","A concise summary of the saved model estimate. This is a forecast, not an actual examination result.");
+    const cardY=y;
+    const cardGap=3;
+    const cardWidth=(contentWidth-cardGap*2)/3;
+    const cards=[
+      {label:"PREDICTED SCORE",value:`${displayValue(p.predicted_score)}/100`,accent:[81,69,205]},
+      {label:"PERFORMANCE BAND",value:displayValue(p.performance_category),accent:[16,125,101]},
+      {label:"SUBJECT",value:displayValue(p.subject),accent:[42,105,165]},
+    ];
+    cards.forEach((card,index)=>{
+      const x=margin+index*(cardWidth+cardGap);
+      pdf.setFillColor(245,246,250);
+      pdf.roundedRect(x,cardY,cardWidth,22,2,2,"F");
+      pdf.setFont("helvetica","bold");
+      pdf.setFontSize(7);
+      pdf.setTextColor(101,113,138);
+      pdf.text(card.label,x+3,cardY+6);
+      pdf.setFontSize(card.value.length>17?8:11);
+      pdf.setTextColor(...card.accent);
+      pdf.text(pdf.splitTextToSize(card.value,cardWidth-6),x+3,cardY+15);
     });
+    y+=29;
+    addRow("Prediction record",`#${p.id}`);
+    addRow("Semester",p.semester);
+    addRow("Prediction created",new Date(p.created_at).toLocaleString());
+    addRow("Model version",p.model_version);
+    addRow("Report generated",generatedAt.toLocaleString());
 
-    addSection("Model explanation");
-    addRow("Dataset provenance",explanation?.dataset||"Explanation not available at report generation time");
-    addRow("Explanation method",explanation?.method||"Not available");
-    if(explanation?.contributions?.length){
-      explanation.contributions.forEach(item=>{
-        const label=item.feature.replaceAll("_"," ").replace(/\b\w/g,char=>char.toUpperCase());
-        addRow(label,`${item.contribution>0?"+":""}${item.contribution.toFixed(2)} model points · ${item.direction}`);
-      });
-      addRow("Interpretation",explanation.disclaimer||"Feature contributions are model-specific and not causal.");
+    addSection("03  Complete assessment inputs","All input fields stored with this prediction are listed below. Hours are shown per day and percentage-based values retain their original scale.");
+    const inputs=p.input_data&&typeof p.input_data==="object"?p.input_data:{};
+    Object.entries(inputs).forEach(([key,value])=>{
+      addRow(prettyLabel(key),inputValue(key,value));
+    });
+    if(!Object.keys(inputs).length)addParagraph("No assessment input details were returned with this prediction.");
+
+    addSection("04  Explainable AI analysis","This section describes the model's baseline and feature contributions when the explanation service is available.");
+    if(reportExplanation){
+      addRow("Explanation method",reportExplanation.method);
+      addRow("Dataset provenance",reportExplanation.dataset);
+      addRow("Model baseline score",reportExplanation.baseline_score===undefined?"Not provided":`${Number(reportExplanation.baseline_score).toFixed(2)} / 100`);
+      addRow("Explanation predicted score",reportExplanation.predicted_score===undefined?"Not provided":`${Number(reportExplanation.predicted_score).toFixed(2)} / 100`);
+      if(Array.isArray(reportExplanation.contributions)&&reportExplanation.contributions.length){
+        addSection("Feature contribution details","Positive values move this model estimate upward relative to its baseline; negative values move it downward. These are model-specific contributions, not causal effects.");
+        reportExplanation.contributions.forEach((item,index)=>{
+          const amount=Number(item.contribution);
+          addRow(`${index+1}. ${prettyLabel(item.feature)}`,`${Number.isFinite(amount)&&amount>0?"+":""}${Number.isFinite(amount)?amount.toFixed(3):"Not available"} model points · ${displayValue(item.direction)}`);
+        });
+      }else{
+        addParagraph("The explanation service did not return feature-level contribution values for this prediction.");
+      }
+      addParagraph(reportExplanation.disclaimer||"Feature contributions describe model behavior and should not be interpreted as proof of cause and effect.",{fontSize:8,color:[101,113,138]});
     }else{
-      addRow("Interpretation","No model explanation was available when this report was generated.");
+      addRow("Explanation status","Not available at report generation time");
+      addParagraph("The prediction and its saved assessment details are included. The explainability endpoint did not return data, so no feature contributions or dataset explanation are invented.",{fontSize:8,color:[101,113,138]});
     }
 
-    addSection("Personalized recommendations");
-    p.recommendations.forEach(addRecommendation);
+    addSection("05  Personalized recommendations","Recommended next steps saved with this prediction, including the priority, suggested action and expected benefit.");
+    if(Array.isArray(p.recommendations)&&p.recommendations.length){
+      p.recommendations.forEach((recommendation,index)=>addRecommendation(recommendation,index));
+    }else{
+      addParagraph("No personalized recommendations were stored for this prediction.");
+    }
 
+    addSection("06  Interpretation and responsible use");
+    addParagraph("The predicted score is a model-generated estimate based on the assessment inputs recorded above. It is not an actual examination mark, a guarantee of future performance, or a substitute for feedback from teachers and academic advisors.");
+    addParagraph("Feature contributions and observed input patterns describe how the model produced this estimate. They do not establish that any single factor causes a change in academic performance.");
+    addParagraph("The current demonstration model has been documented as trained using synthetic data. Its outputs should be treated as demonstrations until validated against appropriately governed, representative real-world student data. Do not use this estimate as the sole basis for high-impact academic decisions.");
+    addRow("Suggested use","Use the report to support reflection, study planning and discussion with an educator.");
+    addRow("Data completeness","Profile fields not supplied by the account are marked Not provided. Explanation details are included only when returned by the service.");
+
+    // Consistent page furniture makes longer reports readable when printed or shared.
     const totalPages=pdf.getNumberOfPages();
     for(let page=1;page<=totalPages;page++){
       pdf.setPage(page);
+      if(page>1){
+        pdf.setFont("helvetica","normal");
+        pdf.setFontSize(7);
+        pdf.setTextColor(130,139,157);
+        pdf.text("EDUPREDICT  /  COMPLETE ACADEMIC PERFORMANCE REPORT",margin,19);
+      }
       pdf.setDrawColor(226,230,239);
-      pdf.line(margin,pageHeight-14,pageWidth-margin,pageHeight-14);
+      pdf.line(margin,pageHeight-15,pageWidth-margin,pageHeight-15);
       pdf.setFont("helvetica","normal");
-      pdf.setFontSize(8);
+      pdf.setFontSize(7.5);
       pdf.setTextColor(101,113,138);
-      pdf.text("EduPredict - Academic decision support",margin,pageHeight-8);
-      pdf.text(`Page ${page} of ${totalPages}`,pageWidth-margin,pageHeight-8,{align:"right"});
+      pdf.text("EduPredict · Academic decision-support report · Keep this document confidential",margin,pageHeight-9);
+      pdf.text(`Page ${page} of ${totalPages}`,pageWidth-margin,pageHeight-9,{align:"right"});
     }
-    const filename=`edupredict-prediction-${p.id}.pdf`;
+
+    const filename=`edupredict-complete-report-${p.id}.pdf`;
     const reportBlob=pdf.output("blob");
     const reportFile=new File([reportBlob],filename,{type:"application/pdf"});
 
     // Prefer the native share/save sheet on mobile browsers that support PDF file sharing.
-    // This avoids relying on a synthetic anchor click for a Blob URL, which is unreliable
-    // in some mobile and embedded browsers.
-    if(navigator.share && navigator.canShare?.({files:[reportFile]})){
+    if(navigator.share&&navigator.canShare?.({files:[reportFile]})){
       try{
         await navigator.share({
           files:[reportFile],
-          title:`EduPredict Prediction Report - ${p.subject}`,
-          text:`Academic performance prediction report #${p.id}`,
+          title:`EduPredict Complete Academic Report - ${p.subject}`,
+          text:`Complete academic performance report #${p.id}`,
         });
         return;
       }catch(shareError){
@@ -569,9 +690,6 @@ function PredictionDetail() {
         console.warn("Native PDF sharing failed; falling back to jsPDF save.",shareError);
       }
     }
-
-    // jsPDF's save helper handles browser-specific download behavior better than
-    // a manually-created Blob URL and an immediately-revoked download anchor.
     pdf.save(filename);
   };
   const maxImpact=explanation?Math.max(...explanation.contributions.map(item=>Math.abs(item.contribution)),0.01):1;
